@@ -64,10 +64,8 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/rockchip-stats/rockchip_stats"
-Documentation = "https://rockchip-stats.github.io/rockchip_stats"
 Repository = "https://github.com/rockchip-stats/rockchip_stats"
-Issues = "https://github.com/rockchip-stats/rockchip_stats/issues"
-Examples = "https://github.com/rockchip-stats/rockchip_stats/tree/main/examples"
+Examples = "https://github.com/rockchip-stats/rockchip_stats/tree/master/examples"
 
 [project.scripts]
 rtop = "rtop.__main__:main"

@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rockchip-stats"
+dynamic = ["version"]
+description = "Interactive system-monitor and process viewer for Rockchip SoC devices [RK3588, RK3588S, RK3568, RK3566, RK3399]"
+readme = "README.md"
+authors = [
+    {name = "Rockchip Stats Contributors"},
+]
+license = {text = "AGPL-3.0"}
+keywords = [
+    "rockchip_stats",
+    "rtop",
+    "python",
+    "system-monitor",
+    "docker",
+    "rockchip",
+    "RK3588",
+    "RK3588S",
+    "RK3568",
+    "RK3566",
+    "RK3399",
+    "Mali",
+    "NPU",
+    "RGA",
+    "MPP",
+    "process",
+    "viewer"
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Software Development :: User Interfaces",
+    "Topic :: System :: Hardware",
+    "Topic :: System :: Logging",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Operating System",
+    "Topic :: System :: Operating System Kernels",
+    "Topic :: System :: Shells",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Terminals",
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+    "Programming Language :: Unix Shell",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: POSIX :: Linux",
+]
+requires-python = ">=3.7"
+dependencies = [
+    "distro",
+]
+
+[project.urls]
+Homepage = "https://github.com/rockchip-stats/rockchip_stats"
+Documentation = "https://rockchip-stats.github.io/rockchip_stats"
+Repository = "https://github.com/rockchip-stats/rockchip_stats"
+Issues = "https://github.com/rockchip-stats/rockchip_stats/issues"
+Examples = "https://github.com/rockchip-stats/rockchip_stats/tree/main/examples"
+
+[project.scripts]
+rtop = "rtop.__main__:main"
+rockchip_release = "rtop.rockchip_release:main"
+
+[tool.setuptools]
+packages = ["rtop", "rtop.core", "rtop.gui", "rtop.gui.lib"]
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.dynamic]
+version = {attr = "rtop.__version__"}
+
+[tool.setuptools.data-files]
+"share/rockchip_stats" = ["services/rtop.service", "scripts/rtop_env.sh"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["tests*", "*.tests*", "examples*"]

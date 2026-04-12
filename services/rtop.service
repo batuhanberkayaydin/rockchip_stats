@@ -1,0 +1,23 @@
+[Unit]
+Description=rtop - Rockchip System Monitor Service
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -m rtop.service
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+ProtectSystem=strict
+ReadWritePaths=/run /tmp /sys
+ProtectHome=read-only
+NoNewPrivileges=false
+
+# Environment
+Environment=RTOP_SERVICE=1
+
+[Install]
+WantedBy=multi-user.target

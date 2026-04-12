@@ -1,0 +1,24 @@
+# Include the README
+include *.md
+
+# Include requirements
+include requirements.txt
+
+# Include the license file
+include LICENSE
+
+# Include the data files
+recursive-include scripts *
+
+# Include services files
+recursive-include services *.service
+
+# Include package tests
+recursive-include rtop/tests *.py
+
+# Remove test docs and examples and tox.ini
+exclude tox.ini
+exclude Dockerfile
+exclude .dockerignore
+prune docs
+prune examples

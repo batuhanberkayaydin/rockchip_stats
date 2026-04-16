@@ -23,9 +23,16 @@ and other kernel interfaces.
 import os
 import re
 import logging
+import shutil
 from .common import cat, GenericInterface
 
 logger = logging.getLogger(__name__)
+
+# Known block-device prefixes for on-board storage on Rockchip platforms.
+#   mmcblk* -> eMMC or SD card (sys/block/mmcblk*/device/type tells them apart)
+#   nvme*   -> NVMe SSD over PCIe (RK3588/RK3576)
+#   sd*     -> USB mass storage / SATA
+_STORAGE_DEV_PREFIXES = ('mmcblk', 'nvme', 'sd')
 
 # Memory info regex
 MEMINFO_REG = re.compile(r'(?P<key>[^:]+):\s+(?P<value>.+)\s+(?P<unit>.)B')
@@ -44,6 +51,88 @@ def meminfo():
     except IOError:
         logger.warning("Cannot read /proc/meminfo")
     return status_mem
+
+
+def _mmcblk_kind(dev_name):
+    """Distinguish eMMC vs SD card for an mmcblk device.
+
+    /sys/block/mmcblkX/device/type returns "MMC" (eMMC) or "SD".
+    Falls back to the raw name if the sysfs entry is absent.
+    """
+    sys_type = '/sys/block/{}/device/type'.format(dev_name)
+    if os.path.isfile(sys_type):
+        try:
+            t = cat(sys_type).strip()
+            if t == 'SD':
+                return 'SD'
+            if t == 'MMC':
+                return 'eMMC'
+        except (IOError, PermissionError):
+            pass
+    return 'MMC'
+
+
+def _storage_label(device):
+    """Return a short human label for a /dev/... block device path."""
+    base = os.path.basename(device)
+    # Strip partition suffix: mmcblk0p1 -> mmcblk0, nvme0n1p1 -> nvme0n1, sda1 -> sda
+    if base.startswith('mmcblk'):
+        dev = base.split('p')[0]
+        return _mmcblk_kind(dev)
+    if base.startswith('nvme'):
+        return 'NVMe'
+    if base.startswith('sd'):
+        return 'Disk'
+    return base
+
+
+def storage_info():
+    """Return a list of dicts describing on-board storage usage.
+
+    Each entry:
+        {'name': 'eMMC' | 'SD' | 'NVMe' | 'Disk',
+         'device': '/dev/mmcblk0p1', 'mount': '/', 'total': bytes,
+         'used': bytes, 'free': bytes}
+
+    Only mounted real block devices are reported (we skip tmpfs / overlay / proc
+    pseudo-filesystems).
+    """
+    entries = []
+    seen = set()
+    try:
+        with open('/proc/mounts', 'r') as f:
+            lines = f.readlines()
+    except (IOError, OSError):
+        return entries
+
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        device, mount, fstype = parts[0], parts[1], parts[2]
+        if not device.startswith('/dev/'):
+            continue
+        base = os.path.basename(device)
+        if not base.startswith(_STORAGE_DEV_PREFIXES):
+            continue
+        # Deduplicate multiple mounts of same device
+        if device in seen:
+            continue
+        seen.add(device)
+        try:
+            usage = shutil.disk_usage(mount)
+        except (OSError, PermissionError):
+            continue
+        entries.append({
+            'name': _storage_label(device),
+            'device': device,
+            'mount': mount,
+            'fstype': fstype,
+            'total': usage.total,
+            'used': usage.used,
+            'free': usage.free,
+        })
+    return entries
 
 
 class Memory(GenericInterface):
@@ -95,6 +184,13 @@ class Memory(GenericInterface):
 
         # Unit is KB
         status['unit'] = 'kB'
+
+        # Storage devices (eMMC / SD / NVMe) — bytes, not kB
+        try:
+            status['storage'] = storage_info()
+        except Exception as e:
+            logger.debug("storage_info failed: %s", e)
+            status['storage'] = []
 
         return status
 

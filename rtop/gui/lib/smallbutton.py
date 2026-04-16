@@ -89,6 +89,45 @@ class SmallButton(object):
         return triggered
 
 
+class HideButton(object):
+    """Button that hides its payload text until the user presses the key
+    (or clicks the bracketed prompt). Used for the Serial Number reveal on
+    the INFO page — mirrors jtop's HideButton behavior.
+    """
+
+    HIDE_PROMPT = "XX CLICK TO READ XXX"
+
+    def __init__(self, trigger_key='s', text=''):
+        self._trigger_key = trigger_key
+        self._text = text
+        self._revealed = False
+
+    def update(self, stdscr, y, x, key, mouse=()):
+        width = len('[{}| {}]'.format(self._trigger_key, self.HIDE_PROMPT))
+
+        # Keyboard reveal
+        if self._trigger_key and key == ord(self._trigger_key):
+            self._revealed = True
+
+        # Mouse reveal
+        if mouse and len(mouse) >= 3:
+            bstate, my, mx = mouse[0], mouse[1], mouse[2]
+            if my == y and mx >= x and mx < x + width:
+                if bstate & curses.BUTTON1_CLICKED:
+                    self._revealed = True
+
+        try:
+            if self._revealed:
+                stdscr.addstr(y, x, self._text, curses.A_NORMAL)
+            else:
+                stdscr.addstr(y, x,
+                              '[{}| {}]'.format(self._trigger_key, self.HIDE_PROMPT),
+                              curses.A_BOLD)
+        except curses.error:
+            pass
+        return self._revealed
+
+
 class ButtonList(object):
     """A row of SmallButtons."""
 

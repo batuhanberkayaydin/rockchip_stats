@@ -55,22 +55,22 @@ def _draw_rga_core(stdscr, y, x, width, core_idx, load, online=True):
     basic_gauge(stdscr, y, x, width, data)
 
 
-def _draw_mpp_core(stdscr, y, x, size, name, info):
-    """Draw one MPP codec core as RUNNING/OFF indicator (jtop engine style)."""
+def _draw_mpp_core(stdscr, y, x, size, name, info, show_tasks=False):
+    """Draw one MPP codec core as RUNNING/OFF indicator (jtop engine style).
+
+    When ``show_tasks`` is True (ENG page), the center label shows the current
+    task count; otherwise (ALL page) it shows a plain "ON"/"OFF" state like
+    jtop's HW engines overview.
+    """
     task_count = info.get('task_count', None)
     active = info.get('active', False)
     label = info.get('label', name.upper())
 
-    # Build freq_data-like dict for basic_gauge_simple
-    freq_data = {
-        'name': '{:<8}'.format(label[:8]),
-        'cur': task_count if isinstance(task_count, int) and task_count >= 0 else 0,
-        'online': active,
-    }
-
     if active:
-        # Show task count as "cur" label and RUNNING indicator
-        task_str = '{} task{}'.format(task_count, 's' if task_count != 1 else '') if isinstance(task_count, int) and task_count > 0 else 'RUNNING'
+        if show_tasks and isinstance(task_count, int) and task_count > 0:
+            center_label = '{} task{}'.format(task_count, 's' if task_count != 1 else '')
+        else:
+            center_label = 'ON'
         color = NColors.green()
         try:
             name_part = '{:<8}'.format(label[:8])
@@ -80,12 +80,11 @@ def _draw_mpp_core(stdscr, y, x, size, name, info):
             if bar_w > 4:
                 stdscr.hline(y, bar_x, curses.ACS_HLINE, bar_w)
                 stdscr.addch(y, bar_x + bar_w, curses.ACS_DIAMOND, curses.A_BOLD)
-                label_pos = bar_x + max(0, (bar_w - len(task_str) - 2)) // 2
-                stdscr.addstr(y, label_pos, ' {} '.format(task_str), color | curses.A_BOLD)
+                label_pos = bar_x + max(0, (bar_w - len(center_label) - 2)) // 2
+                stdscr.addstr(y, label_pos, ' {} '.format(center_label), color | curses.A_BOLD)
         except curses.error:
             pass
     else:
-        # Show OFF
         try:
             name_part = '{:<8}'.format(label[:8])
             stdscr.addstr(y, x, name_part, NColors.cyan())
@@ -276,7 +275,7 @@ class ENG(Page):
             if decoders:
                 line = _draw_section_header(self.stdscr, line, 1, width, "MPP Decoders")
                 for core_name, info in decoders.items():
-                    _draw_mpp_core(self.stdscr, line, 3, gauge_w, core_name, info)
+                    _draw_mpp_core(self.stdscr, line, 3, gauge_w, core_name, info, show_tasks=True)
                     line += 1
                 line += 1
 
@@ -284,7 +283,7 @@ class ENG(Page):
             if encoders:
                 line = _draw_section_header(self.stdscr, line, 1, width, "MPP Encoders")
                 for core_name, info in encoders.items():
-                    _draw_mpp_core(self.stdscr, line, 3, gauge_w, core_name, info)
+                    _draw_mpp_core(self.stdscr, line, 3, gauge_w, core_name, info, show_tasks=True)
                     line += 1
                 line += 1
 
@@ -292,7 +291,7 @@ class ENG(Page):
             if others:
                 line = _draw_section_header(self.stdscr, line, 1, width, "MPP Other")
                 for core_name, info in others.items():
-                    _draw_mpp_core(self.stdscr, line, 3, gauge_w, core_name, info)
+                    _draw_mpp_core(self.stdscr, line, 3, gauge_w, core_name, info, show_tasks=True)
                     line += 1
                 line += 1
 

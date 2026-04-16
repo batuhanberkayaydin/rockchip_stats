@@ -71,6 +71,35 @@ sudo pip3 install --break-system-packages -U rockchip-stats
 
 ---
 
+## Development / Debug (kurulum olmadan çalıştırma)
+
+Projeyi kurmadan kaynak koddan doğrudan çalıştırmak için:
+
+```console
+cd rockchip_stats
+python3 -m rtop
+```
+
+Debug log çıktısı ile çalıştırmak için:
+
+```console
+python3 -m rtop --debug
+```
+
+Servis olmadan (socket bağlantısı kurmadan) çalıştırmak için:
+
+```console
+python3 -m rtop --no-service --debug
+```
+
+Servisi manuel olarak başlatmak için:
+
+```console
+sudo python3 -m rtop --force
+```
+
+---
+
 ## Run
 
 Start rtop by simply typing `rtop`:
@@ -141,10 +170,11 @@ You can run rtop directly in Docker:
 2. Install rockchip-stats in your container
 3. Pass `/run/rtop.sock:/run/rtop.sock` to your container
 
-```console
-docker run --rm -it -v /run/rtop.sock:/run/rtop.sock rockchip-stats:latest
-```
+You can pull the pre-built image from GitHub Container Registry (GHCR):
 
+```console
+docker run --rm -it -v /run/rtop.sock:/run/rtop.sock ghcr.io/<your-github-username>/rockchip-stats:latest
+```
 ## Architecture
 
 rockchip-stats uses a client-server model:

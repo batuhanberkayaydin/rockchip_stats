@@ -14,75 +14,143 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>
 
 """
-Info page - Board and system information with jtop-style dictionary layout.
+INFO page — mirrors jtop's 8INFO layout.
+
+Left column:
+    Platform  — system/release/machine/distribution/python
+    Libraries — RKNN / RGA / MPP / RKLLM / VPU / GStreamer / OpenCV
+Right column:
+    Hardware  — board identity, SoC, kernel, etc.
+    Serial Number — hidden behind a HideButton (press 's')
+    Hostname + Interfaces table
 """
 
+import sys
+import platform
 import curses
+
 from .rtopgui import Page
 from .lib.colors import NColors
-from .lib.common import check_curses, plot_dictionary, _safe_str
+from .lib.common import check_curses, plot_name_info, plot_dictionary, _safe_str
+from .lib.smallbutton import HideButton
+
+try:
+    from ..core.rockchip_libraries import get_libraries, get_local_interfaces
+except Exception:  # pragma: no cover — defensive fallback
+    def get_libraries():
+        return {}
+
+    def get_local_interfaces():
+        import socket
+        return {'hostname': socket.gethostname(), 'interfaces': {}}
+
+
+SERIAL_KEYS = ('Serial', 'serial', 'SerialNumber', 'Serial Number')
+
+
+def _extract_serial(hardware):
+    for k in SERIAL_KEYS:
+        val = hardware.get(k)
+        if val:
+            return str(val)
+    return ''
+
+
+def _build_platform_dict():
+    """Mirror jtop's Platform block (OS / release / machine / python / distro)."""
+    data = {
+        'System':       _safe_str(platform.system()),
+        'Release':      _safe_str(platform.release()),
+        'Machine':      _safe_str(platform.machine()),
+        'Python':       '{}.{}.{}'.format(*sys.version_info[:3]),
+    }
+    try:
+        with open('/etc/os-release', 'r') as f:
+            for ln in f:
+                ln = ln.strip()
+                if ln.startswith('PRETTY_NAME='):
+                    data['Distribution'] = ln.split('=', 1)[1].strip('"')
+                    break
+    except (IOError, OSError):
+        pass
+    return data
 
 
 class INFO(Page):
 
     def __init__(self, stdscr, client):
         super(INFO, self).__init__("INFO", stdscr, client)
+        self._hide_serial = None
+        self._libraries_cache = None
+        self._net_cache = None
+
+    # ── cached static data ──
+
+    def _libraries(self):
+        if self._libraries_cache is None:
+            self._libraries_cache = get_libraries() or {}
+        return self._libraries_cache
+
+    def _network(self):
+        if self._net_cache is None:
+            self._net_cache = get_local_interfaces() or {}
+        return self._net_cache
+
+    # ── draw ──
 
     @check_curses
     def draw(self, key, mouse):
         height, width, first = self.size_page()
-        line = first + 1
+        start_y = first + 1
 
-        # Hardware info section
-        hardware = self.rtop.hardware
-        if hardware and isinstance(hardware, dict):
-            hw_data = {}
-            for key, value in hardware.items():
-                if value:
-                    hw_data[key] = _safe_str(value)
-            if hw_data:
-                line = plot_dictionary(self.stdscr, line, 1, "Hardware", hw_data, size=width - 4)
-                line += 1
-
-        # OS info section
+        # Author / version line (parallels jtop banner)
         try:
-            import platform
-            os_data = {}
-            os_data["System"] = _safe_str(platform.system())
-            os_data["Release"] = _safe_str(platform.release())
-            os_data["Machine"] = _safe_str(platform.machine())
-            os_data["Hostname"] = _safe_str(platform.node())
-            # Get distribution info
+            self.stdscr.addstr(first, 0,
+                               "rtop — System monitor for Rockchip SoC devices",
+                               curses.A_BOLD)
+        except curses.error:
+            pass
+
+        # ── Left column: Platform + Libraries ──
+        left_x = 1
+        plat = _build_platform_dict()
+        y_after_plat = plot_dictionary(self.stdscr, start_y + 1, left_x, "Platform", plat)
+
+        libs = self._libraries()
+        # Colour-code empty/missing libraries inside plot_dictionary (already
+        # does this via its default "MISSING" rendering).
+        y_after_libs = plot_dictionary(self.stdscr, y_after_plat + 1, left_x,
+                                       "Libraries", libs)
+
+        # ── Right column: Hardware + Serial + Hostname + Interfaces ──
+        hardware = self.rtop.hardware or {}
+        right_x = max(40, width // 2)
+
+        serial = _extract_serial(hardware)
+
+        # Hardware dict without the serial — it's drawn separately via HideButton
+        hw_display = {k: v for k, v in hardware.items() if k not in SERIAL_KEYS}
+        y = plot_dictionary(self.stdscr, start_y + 1, right_x, "Hardware", hw_display)
+
+        # Serial line
+        if serial:
             try:
-                with open('/etc/os-release', 'r') as f:
-                    for fline in f:
-                        fline = fline.strip()
-                        if fline.startswith('PRETTY_NAME='):
-                            os_data["Distribution"] = fline.split('=', 1)[1].strip('"')
-                            break
-            except (IOError, OSError):
+                self.stdscr.addstr(y, right_x + 1, "Serial Number:", curses.A_BOLD)
+            except curses.error:
                 pass
-            line = plot_dictionary(self.stdscr, line, 1, "Operating System", os_data, size=width - 4)
-            line += 1
-        except Exception:
-            pass
+            if self._hide_serial is None:
+                self._hide_serial = HideButton(trigger_key='s', text=serial)
+            self._hide_serial.update(self.stdscr, y, right_x + 16, key, mouse)
+            y += 1
 
-        # Python info section
-        try:
-            import sys
-            py_data = {}
-            py_data["Version"] = "{}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro)
-            py_data["Executable"] = sys.executable
-            line = plot_dictionary(self.stdscr, line, 1, "Python", py_data, size=width - 4)
-            line += 1
-        except Exception:
-            pass
-
-        # Kernel info
-        try:
-            import platform
-            kernel_data = {}
-            kernel_data["Version"] = _safe_str(platform.version())
-            line = plot_dictionary(self.stdscr, line, 1, "Kernel", kernel_data, size=width - 4)
-        except Exception:
-            pass
+        # Hostname + Interfaces
+        net = self._network()
+        hostname = net.get('hostname', '')
+        ifaces = net.get('interfaces', {})
+        if hostname:
+            y += 1
+            plot_name_info(self.stdscr, y, right_x + 1, "Hostname", hostname,
+                           color=NColors.cyan())
+            y += 1
+        if ifaces:
+            plot_dictionary(self.stdscr, y, right_x, "Interfaces", ifaces)

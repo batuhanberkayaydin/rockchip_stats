@@ -14,72 +14,164 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>
 
 """
-Memory page - RAM, Swap, CMA with jtop-style gauges, clear cache button,
-and swap management (create/delete/resize).
+Memory page — mirrors jetson_stats jtop 6MEM layout.
+
+Top-left:     color-segmented Mem gauge (used/shared/buffers/cached)
+Top-right:    RAM legend block (Used / Shared / Buffers / Cached / Free / TOT)
+Middle-left:  CMA gauge + on-board storage gauges (eMMC / SD / NVMe)
+Middle-right: [c| clear cache] button + swap controller
+Bottom:       Swap table (active swap entries)
 """
 
 import os
 import subprocess
 import logging
 import curses
+
 from .rtopgui import Page
 from .lib.colors import NColors
-from .lib.common import check_curses, size_to_string
+from .lib.common import check_curses, size_to_string, plot_name_info
 from .lib.linear_gauge import basic_gauge
 from .lib.smallbutton import SmallButton
 
 logger = logging.getLogger(__name__)
 
-# Default swap file path (same as jtop convention)
 _SWAP_FILE = '/mnt/swapfile'
 _SWAP_MIN_GB = 1
 _SWAP_MAX_GB = 16
 
 
+# ── Helper: convert bytes to kB for jtop's size_to_string('k') expectation ────
+
+def _b_to_kb(v):
+    return int(v // 1024) if v else 0
+
+
+# ── Gauges ────────────────────────────────────────────────────────────────────
+
+def mem_gauge(stdscr, pos_y, pos_x, size, ram):
+    """jtop-style RAM gauge with color-segmented used/shared/buffers/cached."""
+    total = ram.get('total', 0) or 1
+    used = ram.get('used', 0)
+    buffers = ram.get('buffers', 0)
+    cached = ram.get('cached', 0)
+    shared = ram.get('shared', 0)
+
+    # `used` from /proc/meminfo already reflects what the kernel calls used
+    # (MemTotal - MemAvailable). To show the segmented bar similarly to jtop we
+    # carve "used" into shared / app-used components.
+    app_used = max(used - shared, 0)
+
+    values = [
+        (app_used / total * 100.0, NColors.cyan()),
+        (shared / total * 100.0, NColors.green() | curses.A_BOLD),
+        (buffers / total * 100.0, NColors.blue()),
+        (cached / total * 100.0, NColors.yellow()),
+    ]
+    data = {
+        'name': 'Mem',
+        'color': NColors.cyan(),
+        'values': values,
+        'mright': "{used}/{tot}".format(
+            used=size_to_string(used, 'k'),
+            tot=size_to_string(total, 'k'),
+        ),
+    }
+    basic_gauge(stdscr, pos_y, pos_x, size - 1, data)
+
+
+def swap_gauge(stdscr, pos_y, pos_x, size, swap):
+    total = swap.get('total', 0)
+    used = swap.get('used', 0)
+    values = [
+        (used / total * 100.0 if total > 0 else 0.0, NColors.red()),
+    ] if total > 0 else []
+    data = {
+        'name': 'Swp',
+        'color': NColors.cyan(),
+        'values': values,
+        'online': total > 0,
+        'mright': "{used}/{tot}".format(
+            used=size_to_string(used, 'k'),
+            tot=size_to_string(total, 'k'),
+        ) if total > 0 else 'no swap',
+    }
+    basic_gauge(stdscr, pos_y, pos_x, size - 1, data)
+
+
+def cma_gauge(stdscr, pos_y, pos_x, size, cma):
+    """Draw CMA gauge. CMA plays the role of EMC/IRAM on jtop for Rockchip."""
+    total = cma.get('total', 0) or 0
+    used = cma.get('used', 0)
+    if total <= 0:
+        return False
+    values = [(used / total * 100.0, NColors.cyan())]
+    data = {
+        'name': 'Cma',
+        'color': NColors.cyan(),
+        'values': values,
+        'mright': "{used}/{tot}".format(
+            used=size_to_string(used, 'k'),
+            tot=size_to_string(total, 'k'),
+        ),
+    }
+    basic_gauge(stdscr, pos_y, pos_x, size - 1, data, bar=':')
+    return True
+
+
+def storage_gauge(stdscr, pos_y, pos_x, size, entry):
+    """Draw a gauge for an on-board storage device (eMMC / SD / NVMe)."""
+    total = entry.get('total', 0) or 0
+    used = entry.get('used', 0)
+    if total <= 0:
+        return
+    pct = used / total * 100.0
+    if pct > 90:
+        bar_color = NColors.red()
+    elif pct > 70:
+        bar_color = NColors.yellow()
+    else:
+        bar_color = NColors.green()
+    data = {
+        'name': '{:<4}'.format(entry.get('name', 'Disk')[:4]),
+        'color': NColors.cyan(),
+        'values': [(pct, bar_color)],
+        'mright': "{used}/{tot}".format(
+            used=size_to_string(used, ''),
+            tot=size_to_string(total, ''),
+        ),
+    }
+    basic_gauge(stdscr, pos_y, pos_x, size - 1, data)
+
+
+# ── Compact memory (ALL page shares this) ─────────────────────────────────────
+
 def compact_memory(stdscr, pos_y, pos_x, width, height, client):
-    """Draw compact memory gauges for ALL page."""
+    """Compact memory gauges used by the ALL overview page."""
     mem = client.memory
     if not mem:
         return 0
     line = 0
     ram = mem.get('ram', {})
-    if ram:
-        total = ram.get('total', 0)
-        used = ram.get('used', 0)
-        if total > 0:
-            value = int(float(used) / float(total) * 100.0)
-            used_str = size_to_string(used)
-            total_str = size_to_string(total)
-            data = {
-                'name': 'RAM',
-                'color': NColors.green(),
-                'values': [(value, NColors.green())],
-                'online': True,
-                'mright': "{}/{}".format(used_str, total_str),
-            }
-            basic_gauge(stdscr, pos_y + line, pos_x + 1, width - 3, data, bar='|')
-            line += 1
+    if ram and ram.get('total', 0) > 0:
+        try:
+            mem_gauge(stdscr, pos_y + line, pos_x + 1, width - 3, ram)
+        except curses.error:
+            pass
+        line += 1
     swap = mem.get('swap', {})
     if swap and swap.get('total', 0) > 0:
-        total = swap.get('total', 0)
-        used = swap.get('used', 0)
-        value = int(float(used) / float(total) * 100.0) if total > 0 else 0
-        used_str = size_to_string(used)
-        total_str = size_to_string(total)
-        data = {
-            'name': 'SWP',
-            'color': NColors.yellow(),
-            'values': [(value, NColors.yellow())],
-            'online': True,
-            'mright': "{}/{}".format(used_str, total_str),
-        }
-        basic_gauge(stdscr, pos_y + line, pos_x + 1, width - 3, data, bar='|')
+        try:
+            swap_gauge(stdscr, pos_y + line, pos_x + 1, width - 3, swap)
+        except curses.error:
+            pass
         line += 1
     return max(line, 1)
 
 
+# ── Root helpers (cache + swap management) ────────────────────────────────────
+
 def _run_as_root(cmd):
-    """Run a shell command with sudo (non-interactive, may fail without NOPASSWD)."""
     try:
         result = subprocess.run(
             ['sudo', '-n'] + cmd,
@@ -93,8 +185,6 @@ def _run_as_root(cmd):
 
 
 def _drop_caches():
-    """Drop page/dentries/inode caches (needs root)."""
-    # Try direct write first (if running as root), then sudo
     try:
         with open('/proc/sys/vm/drop_caches', 'w') as f:
             f.write('3\n')
@@ -106,15 +196,13 @@ def _drop_caches():
 
 
 def _create_swap(size_gb, path=_SWAP_FILE):
-    """Create and enable a swap file of given GB."""
-    cmds = [
+    for cmd in (
         ['dd', 'if=/dev/zero', 'of={}'.format(path),
          'bs=1M', 'count={}'.format(size_gb * 1024)],
         ['chmod', '600', path],
         ['mkswap', path],
         ['swapon', path],
-    ]
-    for cmd in cmds:
+    ):
         ok, err = _run_as_root(cmd)
         if not ok:
             return False, err
@@ -122,7 +210,6 @@ def _create_swap(size_gb, path=_SWAP_FILE):
 
 
 def _disable_swap(path=_SWAP_FILE):
-    """Disable and remove a swap file."""
     ok, err = _run_as_root(['swapoff', path])
     if not ok:
         return False, err
@@ -133,7 +220,11 @@ def _disable_swap(path=_SWAP_FILE):
     return True, ''
 
 
+# ── MEM page ──────────────────────────────────────────────────────────────────
+
 class MEM(Page):
+
+    LEGEND_WIDTH = 18    # right-hand RAM legend column
 
     def __init__(self, stdscr, client):
         super(MEM, self).__init__("MEM", stdscr, client)
@@ -146,8 +237,9 @@ class MEM(Page):
         self._swap_size_gb = 4
         self._status_msg = ''
         self._status_color = curses.A_NORMAL
-        # Detect if swap file exists on boot
-        self._btn_boot._state = os.path.exists('/etc/fstab') and self._fstab_has_swap()
+        self._btn_boot._state = self._fstab_has_swap()
+
+    # ── persistence helpers ──────────────────────────────────────────────────
 
     def _fstab_has_swap(self):
         try:
@@ -160,7 +252,6 @@ class MEM(Page):
         return False
 
     def _set_boot_swap(self, enable):
-        """Add or remove swap file entry from /etc/fstab."""
         entry = '{} none swap sw 0 0\n'.format(_SWAP_FILE)
         try:
             with open('/etc/fstab', 'r') as f:
@@ -170,7 +261,6 @@ class MEM(Page):
                     lines.append(entry)
             else:
                 lines = [l for l in lines if _SWAP_FILE not in l]
-            # Write via sudo tee
             content = ''.join(lines)
             result = subprocess.run(
                 ['sudo', '-n', 'tee', '/etc/fstab'],
@@ -191,150 +281,134 @@ class MEM(Page):
             self._status_msg = 'FAILED: {}'.format(msg[:40]) if msg else 'FAILED'
             self._status_color = NColors.red()
 
+    # ── sub-panels ───────────────────────────────────────────────────────────
+
+    def _draw_ram_legend(self, pos_y, pos_x, ram):
+        """Right-hand RAM legend panel (mirrors jtop.draw_ram_legend)."""
+        try:
+            self.stdscr.addstr(pos_y, pos_x + 1, "     RAM     ", curses.A_REVERSE)
+        except curses.error:
+            pass
+        rows = [
+            ('Used',    ram.get('used', 0),    NColors.cyan()),
+            ('Shared',  ram.get('shared', 0),  NColors.green()),
+            ('Buffers', ram.get('buffers', 0), NColors.blue()),
+            ('Cached',  ram.get('cached', 0),  NColors.yellow()),
+            ('Free',    ram.get('free', 0),    curses.A_NORMAL),
+            ('TOT',     ram.get('total', 0),   curses.A_BOLD),
+        ]
+        for i, (label, value, color) in enumerate(rows):
+            plot_name_info(self.stdscr, pos_y + 1 + i, pos_x + 2, label,
+                           size_to_string(value, 'k'), color=color)
+
+    def _draw_swap_controller(self, pos_y, pos_x, key, mouse, has_swap):
+        """Right-hand swap controller block (create/resize/boot/disable)."""
+        # Cache-clear button
+        if self._btn_cache.update(self.stdscr, pos_y, pos_x, 'clear cache', key, mouse):
+            ok, err = _drop_caches()
+            self._show_status(ok, err)
+        if self._status_msg:
+            try:
+                self.stdscr.addstr(pos_y, pos_x + 16, self._status_msg, self._status_color)
+            except curses.error:
+                pass
+
+        # "Create new" button
+        if self._btn_create.update(self.stdscr, pos_y + 2, pos_x, 'Create new', key, mouse):
+            ok, err = _create_swap(self._swap_size_gb)
+            self._show_status(ok, err)
+
+        # "on boot" toggle
+        if self._btn_boot.update(self.stdscr, pos_y + 3, pos_x, 'on boot', key, mouse):
+            ok, err = self._set_boot_swap(self._btn_boot.state)
+            if not ok:
+                self._btn_boot._state = not self._btn_boot._state
+                self._show_status(ok, err)
+
+        # Size line:  [- |]  N GB  [+ |]
+        dec = self._btn_decrease.update(self.stdscr, pos_y + 4, pos_x, '', key, mouse)
+        if dec and self._swap_size_gb > _SWAP_MIN_GB:
+            self._swap_size_gb -= 1
+        try:
+            self.stdscr.addstr(pos_y + 4, pos_x + 5, "{:>2}".format(self._swap_size_gb), curses.A_BOLD)
+            self.stdscr.addstr(pos_y + 4, pos_x + 8, "GB", curses.A_BOLD)
+        except curses.error:
+            pass
+        inc = self._btn_increase.update(self.stdscr, pos_y + 4, pos_x + 11, '', key, mouse)
+        if inc and self._swap_size_gb < _SWAP_MAX_GB:
+            self._swap_size_gb += 1
+
+        # "Disable swap" available only when a swap is active
+        if has_swap:
+            if self._btn_disable.update(self.stdscr, pos_y + 6, pos_x, 'Disable swap', key, mouse):
+                ok, err = _disable_swap()
+                self._show_status(ok, err)
+
+    # ── main draw ────────────────────────────────────────────────────────────
+
     @check_curses
     def draw(self, key, mouse):
         height, width, first = self.size_page()
         line = first + 1
+
         mem = self.rtop.memory
         if not mem:
             self.stdscr.addstr(line, 1, "Memory information not available", curses.A_BOLD)
             return
 
-        # RAM gauge
         ram = mem.get('ram', {})
-        if ram:
-            total = ram.get('total', 0)
-            used = ram.get('used', 0)
-            if total > 0:
-                value = int(float(used) / float(total) * 100.0)
-                used_str = size_to_string(used)
-                total_str = size_to_string(total)
-                data = {
-                    'name': 'RAM',
-                    'color': NColors.green(),
-                    'values': [(value, NColors.green())],
-                    'online': True,
-                    'mright': "{}/{}".format(used_str, total_str),
-                }
-                basic_gauge(self.stdscr, line, 1, width - 2, data, bar='|')
-                line += 1
-            # Detailed breakdown
-            free = ram.get('free', 0)
-            buffers = ram.get('buffers', 0)
-            cached = ram.get('cached', 0)
-            half_w = (width - 2) // 2
-            col1_x = 3
-            col2_x = col1_x + half_w
-            row = line
-            for label, val, col_x in [("Used", used, col1_x), ("Free", free, col2_x),
-                                       ("Buffers", buffers, col1_x), ("Cached", cached, col2_x)]:
-                if val:
-                    try:
-                        self.stdscr.addstr(row, col_x, label + ":", curses.A_BOLD)
-                        self.stdscr.addstr(row, col_x + len(label) + 2, size_to_string(val))
-                    except curses.error:
-                        pass
-                if col_x == col2_x:
-                    row += 1
-            line = row + 1
-
-        # Clear cache button
-        if height > line:
-            triggered = self._btn_cache.update(
-                self.stdscr, line, 1, 'clear cache', key, mouse)
-            if triggered:
-                ok, err = _drop_caches()
-                self._show_status(ok, err)
-            # Status message next to button
-            if self._status_msg:
-                try:
-                    self.stdscr.addstr(line, 20, self._status_msg, self._status_color)
-                except curses.error:
-                    pass
-            line += 2
-
-        # Swap gauge
         swap = mem.get('swap', {})
-        swap_total = swap.get('total', 0) if swap else 0
-        if swap_total > 0:
-            used = swap.get('used', 0)
-            value = int(float(used) / float(swap_total) * 100.0)
-            used_str = size_to_string(used)
-            total_str = size_to_string(swap_total)
-            data = {
-                'name': 'SWP',
-                'color': NColors.yellow(),
-                'values': [(value, NColors.yellow())],
-                'online': True,
-                'mright': "{}/{}".format(used_str, total_str),
-            }
-            basic_gauge(self.stdscr, line, 1, width - 2, data, bar='|')
+        cma = mem.get('cma', {})
+        shmem = mem.get('shmem', {})
+        storage = mem.get('storage', []) or []
+
+        # Synthesize "shared" from shmem for the segmented gauge & legend.
+        if ram:
+            ram = dict(ram)
+            ram.setdefault('shared', shmem.get('total', 0))
+
+        legend_x = width - self.LEGEND_WIDTH
+        gauge_w = max(20, legend_x - 2)
+
+        # ── Main RAM gauge (top-left) ──
+        if ram and ram.get('total', 0) > 0:
+            mem_gauge(self.stdscr, line, 1, gauge_w, ram)
+            # Right-hand legend (shares vertical space with gauge + next lines)
+            self._draw_ram_legend(line, legend_x, ram)
             line += 1
 
-        # Swap controller
-        if height > line + 1:
-            try:
-                self.stdscr.addstr(line, 1, "Swap:", curses.A_BOLD)
-            except curses.error:
-                pass
-            # Size: [- | dec]  N GB  [+ | inc]
-            cx = 8
-            dec_t = self._btn_decrease.update(self.stdscr, line, cx, '-', key, mouse)
-            if dec_t and self._swap_size_gb > _SWAP_MIN_GB:
-                self._swap_size_gb -= 1
-            cx += 6  # len('[- | -]') + 1 ~ 7
-            size_str = '{} GB'.format(self._swap_size_gb)
-            try:
-                self.stdscr.addstr(line, cx, size_str, curses.A_BOLD)
-            except curses.error:
-                pass
-            cx += len(size_str) + 1
-            inc_t = self._btn_increase.update(self.stdscr, line, cx, '+', key, mouse)
-            if inc_t and self._swap_size_gb < _SWAP_MAX_GB:
-                self._swap_size_gb += 1
-            cx += 6
-
-            # Create new swap button
-            create_t = self._btn_create.update(self.stdscr, line, cx, 'Create new', key, mouse)
-            if create_t:
-                ok, err = _create_swap(self._swap_size_gb)
-                self._show_status(ok, err)
-            cx += len('[s| Create new]') + 1
-
-            # On-boot toggle
-            boot_t = self._btn_boot.update(self.stdscr, line, cx, 'on boot', key, mouse)
-            if boot_t:
-                ok, err = self._set_boot_swap(self._btn_boot.state)
-                if not ok:
-                    self._btn_boot._state = not self._btn_boot._state  # revert
-                    self._show_status(ok, err)
+        # ── CMA gauge ──
+        if cma and cma.get('total', 0) > 0 and height > line:
+            cma_gauge(self.stdscr, line, 1, gauge_w, cma)
             line += 1
 
-            # Disable swap button (only if swap is active)
-            if swap_total > 0 and height > line:
-                disable_t = self._btn_disable.update(
-                    self.stdscr, line, 1, 'Disable swap', key, mouse)
-                if disable_t:
-                    ok, err = _disable_swap()
-                    self._show_status(ok, err)
+        # ── Storage gauges (eMMC / SD / NVMe) ──
+        if storage and height > line + len(storage):
+            try:
+                self.stdscr.addstr(line, 1, "Storage", curses.A_BOLD | NColors.cyan())
+            except curses.error:
+                pass
+            line += 1
+            for entry in storage:
+                if height <= line:
+                    break
+                storage_gauge(self.stdscr, line, 1, gauge_w, entry)
                 line += 1
 
-        line += 1
+        # Controller column grows downwards to the right of the gauges; we
+        # start it right under the legend so it doesn't overlap.
+        ctrl_y = first + 1 + 7  # RAM legend is 7 rows (title + 6 fields)
+        if height > ctrl_y + 4:
+            self._draw_swap_controller(ctrl_y, legend_x, key, mouse,
+                                       has_swap=swap.get('total', 0) > 0)
 
-        # CMA
-        cma = mem.get('cma', {})
-        if cma and cma.get('total', 0) > 0 and height > line:
-            total = cma.get('total', 0)
-            used = cma.get('used', 0)
-            value = int(float(used) / float(total) * 100.0) if total > 0 else 0
-            used_str = size_to_string(used)
-            total_str = size_to_string(total)
-            data = {
-                'name': 'CMA',
-                'color': NColors.cyan(),
-                'values': [(value, NColors.cyan())],
-                'online': True,
-                'mright': "{}/{}".format(used_str, total_str),
-            }
-            basic_gauge(self.stdscr, line, 1, width - 2, data, bar='|')
-            line += 2
+        # ── Swap gauge + table (bottom span) ──
+        if height > line + 1:
+            line += 1
+            try:
+                self.stdscr.addstr(line, 1, "SWAP", curses.A_BOLD | NColors.cyan())
+            except curses.error:
+                pass
+            line += 1
+            swap_gauge(self.stdscr, line, 1, width - 2, swap)
+            line += 1

@@ -54,7 +54,6 @@ except NameError:
     FileNotFoundError = IOError
 
 
-
 class RtopServer(object):
     """Background server that collects all Rockchip hardware stats."""
 

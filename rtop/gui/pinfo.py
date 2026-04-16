@@ -119,8 +119,7 @@ class INFO(Page):
         libs = self._libraries()
         # Colour-code empty/missing libraries inside plot_dictionary (already
         # does this via its default "MISSING" rendering).
-        y_after_libs = plot_dictionary(self.stdscr, y_after_plat + 1, left_x,
-                                       "Libraries", libs)
+        plot_dictionary(self.stdscr, y_after_plat + 1, left_x, "Libraries", libs)
 
         # ── Right column: Hardware + Serial + Hostname + Interfaces ──
         hardware = self.rtop.hardware or {}

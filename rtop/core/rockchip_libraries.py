@@ -33,7 +33,6 @@ GUI can highlight it as MISSING.
 
 import os
 import re
-import glob
 import logging
 import subprocess
 

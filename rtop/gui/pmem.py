@@ -260,7 +260,7 @@ class MEM(Page):
                 if entry not in lines:
                     lines.append(entry)
             else:
-                lines = [l for l in lines if _SWAP_FILE not in l]
+                lines = [ln for ln in lines if _SWAP_FILE not in ln]
             content = ''.join(lines)
             result = subprocess.run(
                 ['sudo', '-n', 'tee', '/etc/fstab'],

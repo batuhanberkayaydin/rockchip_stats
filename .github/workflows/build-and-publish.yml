@@ -34,6 +34,8 @@ jobs:
     name: Test on python ${{ matrix.python-version }}
     runs-on: [self-hosted, Linux, ARM64, raspi]
     needs: [auto_style]
+    container:
+      image: python:${{ matrix.python-version }}-slim
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
@@ -41,10 +43,6 @@ jobs:
     steps:
       - run: echo "Branch $GITHUB_REF"
       - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -52,7 +50,7 @@ jobs:
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Test with tox
-        run: tox -e py${{ matrix.python-version }}
+        run: tox -e py${{ fromJSON('{"3.8":"38","3.9":"39","3.10":"310","3.11":"311","3.12":"312","3.13":"313"}')[matrix.python-version] }}
 
   create_tag:
     name: Create version tag

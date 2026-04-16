@@ -23,13 +23,13 @@ from .colors import NColors
 
 # Column definitions: (header_text, width, key_in_proc, right_align, format_fn)
 _COLUMNS = [
-    ('PID',     7,  'pid',     True,  lambda v: str(v)),
-    ('USER',    9,  'user',    False, lambda v: str(v)[:9]),
-    ('PRI',     4,  'pri',     True,  lambda v: str(v)),
-    ('S',       2,  'stat',    False, lambda v: str(v)[:1]),
-    ('CPU%',    6,  'cpu',     True,  lambda v: '{:.1f}'.format(float(v) if v else 0)),
-    ('MEM',     8,  'mem_str', False, lambda v: str(v)),
-    ('Command', 0,  'cmd',     False, lambda v: str(v)),   # 0 = fill remaining
+    ('PID', 7, 'pid', True, lambda v: str(v)),
+    ('USER', 9, 'user', False, lambda v: str(v)[:9]),
+    ('PRI', 4, 'pri', True, lambda v: str(v)),
+    ('S', 2, 'stat', False, lambda v: str(v)[:1]),
+    ('CPU%', 6, 'cpu', True, lambda v: '{:.1f}'.format(float(v) if v else 0)),
+    ('MEM', 8, 'mem_str', False, lambda v: str(v)),
+    ('Command', 0, 'cmd', False, lambda v: str(v)),   # 0 = fill remaining
 ]
 
 

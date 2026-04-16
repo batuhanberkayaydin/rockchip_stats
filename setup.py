@@ -172,12 +172,14 @@ def pypi_installer(installer, obj, copy):
 
 class RTOPInstallCommand(install):
     """Custom installation command for production install."""
+
     def run(self):
         pypi_installer(install, self, True)
 
 
 class RTOPDevelopCommand(develop):
     """Custom installation command for development mode."""
+
     def run(self):
         pypi_installer(develop, self, False)
 

@@ -150,16 +150,16 @@ def _detect_rga():
 
 
 def _detect_mpp():
-    p = _first_existing([
-        'librockchip_mpp.so', 'librockchip_mpp.so.1', 'librockchip_mpp.so.0'])
+    p = _first_existing(['librockchip_mpp.so', 'librockchip_mpp.so.1',
+                         'librockchip_mpp.so.0'])
     if not p:
         return ''
     return _soname_version(p) or _extract_version_blob(p, 'mpp_version') or 'detected'
 
 
 def _detect_vpu():
-    p = _first_existing([
-        'librockchip_vpu.so', 'librockchip_vpu.so.1', 'librockchip_vpu.so.0'])
+    p = _first_existing(['librockchip_vpu.so', 'librockchip_vpu.so.1',
+                         'librockchip_vpu.so.0'])
     if not p:
         return ''
     return _soname_version(p) or 'detected'

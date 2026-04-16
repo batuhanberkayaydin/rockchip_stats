@@ -34,7 +34,7 @@ def check_curses(func):
 def set_xterm_title(title):
     """Set XTerm title using escape sequences."""
     if os.environ.get('TERM') in ('xterm', 'xterm-color', 'xterm-256color',
-                                   'linux', 'screen', 'screen-256color', 'screen-bce'):
+                                  'linux', 'screen', 'screen-256color', 'screen-bce'):
         sys.stdout.write('\33]0;' + title + '\a')
         sys.stdout.flush()
 

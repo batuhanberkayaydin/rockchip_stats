@@ -84,7 +84,7 @@ def _engine_rows(rga, mpp):
     if mpp and isinstance(mpp, dict):
         decoders = mpp.get('decoders', {})
         encoders = mpp.get('encoders', {})
-        others   = mpp.get('others', {})
+        others = mpp.get('others', {})
         if decoders:
             rows += 1 + len(decoders)   # header + one row each
         if encoders:

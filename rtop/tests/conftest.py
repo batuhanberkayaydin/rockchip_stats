@@ -17,6 +17,8 @@
 Test configuration and fixtures for rtop tests.
 """
 
+from rtop.core.exceptions import RtopException
+from rtop.core.common import GenericInterface
 import os
 import sys
 import pytest
@@ -25,9 +27,6 @@ from unittest.mock import patch, MagicMock
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from rtop.core.common import GenericInterface
-from rtop.core.exceptions import RtopException
 
 
 @pytest.fixture

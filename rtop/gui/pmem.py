@@ -290,12 +290,12 @@ class MEM(Page):
         except curses.error:
             pass
         rows = [
-            ('Used',    ram.get('used', 0),    NColors.cyan()),
-            ('Shared',  ram.get('shared', 0),  NColors.green()),
+            ('Used', ram.get('used', 0), NColors.cyan()),
+            ('Shared', ram.get('shared', 0), NColors.green()),
             ('Buffers', ram.get('buffers', 0), NColors.blue()),
-            ('Cached',  ram.get('cached', 0),  NColors.yellow()),
-            ('Free',    ram.get('free', 0),    curses.A_NORMAL),
-            ('TOT',     ram.get('total', 0),   curses.A_BOLD),
+            ('Cached', ram.get('cached', 0), NColors.yellow()),
+            ('Free', ram.get('free', 0), curses.A_NORMAL),
+            ('TOT', ram.get('total', 0), curses.A_BOLD),
         ]
         for i, (label, value, color) in enumerate(rows):
             plot_name_info(self.stdscr, pos_y + 1 + i, pos_x + 2, label,

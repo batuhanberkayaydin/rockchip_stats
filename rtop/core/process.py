@@ -88,7 +88,9 @@ def get_processes(max_count=10):
         # Format: pid (comm) state ppid ... utime stime ... priority nice ... starttime vsize rss
         try:
             # Find comm between first ( and last ) to handle spaces in name
-            m = re.match(r'^(\d+)\s+\((.+)\)\s+(\S+)\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(\d+)\s+(\d+)\s+\S+\s+\S+\s+(-?\d+)\s+(-?\d+)\s+\S+\s+\S+\s+\S+\s+(\d+)\s+\S+\s+(\d+)', stat)
+            m = re.match(
+                r'^(\d+)\s+\((.+)\)\s+(\S+)\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(\d+)\s+(\d+)\s+\S+\s+\S+\s+(-?\d+)\s+(-?\d+)\s+\S+\s+\S+\s+\S+\s+(\d+)\s+\S+\s+(\d+)',
+                stat)
             if not m:
                 continue
             comm = m.group(2)
@@ -151,14 +153,14 @@ def get_processes(max_count=10):
             cmd = '[{}]'.format(comm)
 
         procs.append({
-            'pid':     pid,
-            'user':    user,
-            'pri':     priority,
-            'stat':    state,
-            'cpu':     max(0.0, cpu_pct),
-            'mem':     mem_pct,
+            'pid': pid,
+            'user': user,
+            'pri': priority,
+            'stat': state,
+            'cpu': max(0.0, cpu_pct),
+            'mem': mem_pct,
             'mem_str': mem_str,
-            'cmd':     cmd,
+            'cmd': cmd,
         })
 
     # Sort by CPU descending, take top max_count

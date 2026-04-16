@@ -50,7 +50,7 @@ class Fan(GenericInterface):
         self._cooling_devices = self._detect_cooling_devices()
         self._pwm_fans = self._detect_pwm_fans()
         logger.info("Cooling devices: %d, PWM fans: %d",
-                     len(self._cooling_devices), len(self._pwm_fans))
+                    len(self._cooling_devices), len(self._pwm_fans))
 
     def _detect_cooling_devices(self):
         """Detect all cooling devices."""

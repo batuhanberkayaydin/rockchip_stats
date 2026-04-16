@@ -168,7 +168,7 @@ def compact_engines(stdscr, pos_y, pos_x, width, height, client):
     if mpp and isinstance(mpp, dict):
         decoders = mpp.get('decoders', {})
         encoders = mpp.get('encoders', {})
-        others   = mpp.get('others', {})
+        others = mpp.get('others', {})
 
         if decoders and _fits():
             if not _header("Decoders"):
@@ -267,7 +267,7 @@ class ENG(Page):
             has_content = True
             decoders = mpp.get('decoders', {})
             encoders = mpp.get('encoders', {})
-            others   = mpp.get('others', {})
+            others = mpp.get('others', {})
 
             gauge_w = width - 6
 

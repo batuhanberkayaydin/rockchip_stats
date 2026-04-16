@@ -28,17 +28,17 @@ logger = logging.getLogger(__name__)
 
 # Known Rockchip SoC compatible strings
 ROCKCHIP_SOCS = {
-    'rk3588':   {'name': 'RK3588',   'cpu_cores': 8, 'big_little': True,  'npu_cores': 3, 'npu_tops': 6.0},
-    'rk3588s':  {'name': 'RK3588S',  'cpu_cores': 8, 'big_little': True,  'npu_cores': 3, 'npu_tops': 6.0},
-    'rk3576':   {'name': 'RK3576',   'cpu_cores': 8, 'big_little': True,  'npu_cores': 3, 'npu_tops': 6.0},
-    'rk3568':   {'name': 'RK3568',   'cpu_cores': 4, 'big_little': False, 'npu_cores': 1, 'npu_tops': 1.0},
-    'rk3566':   {'name': 'RK3566',   'cpu_cores': 4, 'big_little': False, 'npu_cores': 1, 'npu_tops': 1.0},
-    'rk3562':   {'name': 'RK3562',   'cpu_cores': 4, 'big_little': False, 'npu_cores': 1, 'npu_tops': 1.0},
-    'rk3399pro':{'name': 'RK3399Pro','cpu_cores': 6, 'big_little': True,  'npu_cores': 1, 'npu_tops': 3.0},
-    'rk3399':   {'name': 'RK3399',   'cpu_cores': 6, 'big_little': True,  'npu_cores': 0, 'npu_tops': 0},
-    'rk3288':   {'name': 'RK3288',   'cpu_cores': 4, 'big_little': False, 'npu_cores': 0, 'npu_tops': 0},
-    'rk3308':   {'name': 'RK3308',   'cpu_cores': 4, 'big_little': False, 'npu_cores': 0, 'npu_tops': 0},
-    'rk3328':   {'name': 'RK3328',   'cpu_cores': 4, 'big_little': False, 'npu_cores': 0, 'npu_tops': 0},
+    'rk3588': {'name': 'RK3588', 'cpu_cores': 8, 'big_little': True, 'npu_cores': 3, 'npu_tops': 6.0},
+    'rk3588s': {'name': 'RK3588S', 'cpu_cores': 8, 'big_little': True, 'npu_cores': 3, 'npu_tops': 6.0},
+    'rk3576': {'name': 'RK3576', 'cpu_cores': 8, 'big_little': True, 'npu_cores': 3, 'npu_tops': 6.0},
+    'rk3568': {'name': 'RK3568', 'cpu_cores': 4, 'big_little': False, 'npu_cores': 1, 'npu_tops': 1.0},
+    'rk3566': {'name': 'RK3566', 'cpu_cores': 4, 'big_little': False, 'npu_cores': 1, 'npu_tops': 1.0},
+    'rk3562': {'name': 'RK3562', 'cpu_cores': 4, 'big_little': False, 'npu_cores': 1, 'npu_tops': 1.0},
+    'rk3399pro': {'name': 'RK3399Pro', 'cpu_cores': 6, 'big_little': True, 'npu_cores': 1, 'npu_tops': 3.0},
+    'rk3399': {'name': 'RK3399', 'cpu_cores': 6, 'big_little': True, 'npu_cores': 0, 'npu_tops': 0},
+    'rk3288': {'name': 'RK3288', 'cpu_cores': 4, 'big_little': False, 'npu_cores': 0, 'npu_tops': 0},
+    'rk3308': {'name': 'RK3308', 'cpu_cores': 4, 'big_little': False, 'npu_cores': 0, 'npu_tops': 0},
+    'rk3328': {'name': 'RK3328', 'cpu_cores': 4, 'big_little': False, 'npu_cores': 0, 'npu_tops': 0},
 }
 
 # Base paths for Rockchip hardware

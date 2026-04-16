@@ -46,18 +46,18 @@ TASK_COUNT_RE = re.compile(r'(\d+)')
 # Codec type from core name
 DECODER_PREFIXES = ('rkvdec', 'jpegd', 'av1d', 'vdpu')
 ENCODER_PREFIXES = ('rkvenc', 'jpege', 'vepu')
-OTHER_PREFIXES   = ('iep',)
+OTHER_PREFIXES = ('iep',)
 
 # Human-readable codec labels
 CODEC_LABELS = {
     'rkvdec': 'RKVDEC',   # H.264/H.265 decode
     'rkvenc': 'RKVENC',   # H.264/H.265 encode
-    'jpege':  'JPEGE',    # JPEG encode
-    'jpegd':  'JPEGD',    # JPEG decode
-    'av1d':   'AV1D',     # AV1 decode
-    'vdpu':   'VDPU',     # Legacy decode
-    'vepu':   'VEPU',     # Legacy encode
-    'iep':    'IEP',      # Image Enhancement
+    'jpege': 'JPEGE',    # JPEG encode
+    'jpegd': 'JPEGD',    # JPEG decode
+    'av1d': 'AV1D',     # AV1 decode
+    'vdpu': 'VDPU',     # Legacy decode
+    'vepu': 'VEPU',     # Legacy encode
+    'iep': 'IEP',      # Image Enhancement
 }
 
 
@@ -156,10 +156,10 @@ class MPPService(object):
                 status['any_active'] = True
 
             info = {
-                'label':       _codec_label(core_name),
-                'task_count':  tc,
-                'active':      active,
-                'online':      True,
+                'label': _codec_label(core_name),
+                'task_count': tc,
+                'active': active,
+                'online': True,
             }
             ctype = _codec_type(core_name)
             if ctype == 'decoder':

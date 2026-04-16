@@ -59,10 +59,10 @@ def _extract_serial(hardware):
 def _build_platform_dict():
     """Mirror jtop's Platform block (OS / release / machine / python / distro)."""
     data = {
-        'System':       _safe_str(platform.system()),
-        'Release':      _safe_str(platform.release()),
-        'Machine':      _safe_str(platform.machine()),
-        'Python':       '{}.{}.{}'.format(*sys.version_info[:3]),
+        'System': _safe_str(platform.system()),
+        'Release': _safe_str(platform.release()),
+        'Machine': _safe_str(platform.machine()),
+        'Python': '{}.{}.{}'.format(*sys.version_info[:3]),
     }
     try:
         with open('/etc/os-release', 'r') as f:

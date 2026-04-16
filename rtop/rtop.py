@@ -454,9 +454,9 @@ class StandaloneRtop(object):
         if mpp_raw and isinstance(mpp_raw, dict):
             # Pass through the structured data from MPPService.get_status()
             stats['mpp'] = {
-                'decoders':   mpp_raw.get('decoders', {}),
-                'encoders':   mpp_raw.get('encoders', {}),
-                'others':     mpp_raw.get('others', {}),
+                'decoders': mpp_raw.get('decoders', {}),
+                'encoders': mpp_raw.get('encoders', {}),
+                'others': mpp_raw.get('others', {}),
                 'any_active': mpp_raw.get('any_active', False),
             }
         else:

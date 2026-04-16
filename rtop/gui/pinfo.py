@@ -59,10 +59,10 @@ def _extract_serial(hardware):
 def _build_platform_dict():
     """Mirror jtop's Platform block (OS / release / machine / python / distro)."""
     data = {
-        'System':       _safe_str(platform.system()),
-        'Release':      _safe_str(platform.release()),
-        'Machine':      _safe_str(platform.machine()),
-        'Python':       '{}.{}.{}'.format(*sys.version_info[:3]),
+        'System': _safe_str(platform.system()),
+        'Release': _safe_str(platform.release()),
+        'Machine': _safe_str(platform.machine()),
+        'Python': '{}.{}.{}'.format(*sys.version_info[:3]),
     }
     try:
         with open('/etc/os-release', 'r') as f:
@@ -119,8 +119,7 @@ class INFO(Page):
         libs = self._libraries()
         # Colour-code empty/missing libraries inside plot_dictionary (already
         # does this via its default "MISSING" rendering).
-        y_after_libs = plot_dictionary(self.stdscr, y_after_plat + 1, left_x,
-                                       "Libraries", libs)
+        plot_dictionary(self.stdscr, y_after_plat + 1, left_x, "Libraries", libs)
 
         # ── Right column: Hardware + Serial + Hostname + Interfaces ──
         hardware = self.rtop.hardware or {}

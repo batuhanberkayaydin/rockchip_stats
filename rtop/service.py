@@ -21,10 +21,9 @@ and client connections (GUI, API, etc.).
 """
 
 import os
-import sys
+import shutil
 import logging
-from copy import deepcopy
-from multiprocessing import Process, Queue, Event
+from multiprocessing import Queue, Event
 from multiprocessing.managers import SyncManager
 
 from .core.common import get_uptime
@@ -54,10 +53,6 @@ try:
 except NameError:
     FileNotFoundError = IOError
 
-try:
-    import queue
-except ImportError:
-    import Queue as queue
 
 
 class RtopServer(object):

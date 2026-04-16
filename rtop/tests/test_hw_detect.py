@@ -26,15 +26,18 @@ from rtop.core.hw_detect import detect_soc, has_gpu, has_npu, has_mpp, get_npu_d
 class TestDetectSoc:
     """Tests for SoC detection."""
 
-    def test_detect_rk3588(self, mock_sysfs):
-        with patch('rtop.core.hw_detect.cat', return_value="rockchip,rk3588-evb\0rockchip,rk3588"):
-            soc = detect_soc()
-            assert soc is not None
+    def test_detect_rk3588(self, tmp_path):
+        compatible = tmp_path / "compatible"
+        compatible.write_text("rockchip,rk3588-evb\x00rockchip,rk3588")
+        with patch('rtop.core.hw_detect.os.path.isfile', return_value=True):
+            with patch('builtins.open', return_value=compatible.open('r')):
+                soc = detect_soc()
+                assert soc == 'rk3588'
 
     def test_detect_unknown(self):
-        with patch('rtop.core.hw_detect.cat', return_value="unknown,vendor\0unknown,soc"):
+        with patch('rtop.core.hw_detect.os.path.isfile', return_value=False):
             soc = detect_soc()
-            assert soc is not None
+            assert soc is None
 
 
 class TestDetectFeatures:

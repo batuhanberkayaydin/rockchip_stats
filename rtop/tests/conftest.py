@@ -90,14 +90,13 @@ def mock_sysfs(tmp_path):
 @pytest.fixture
 def generic_interface():
     """Create a GenericInterface for testing."""
-    return GenericInterface(
-        name="test",
-        data={
-            "key1": "value1",
-            "key2": 42,
-            "nested": {"a": 1, "b": 2},
-        }
-    )
+    gi = GenericInterface()
+    gi._update({
+        "key1": "value1",
+        "key2": 42,
+        "nested": {"a": 1, "b": 2},
+    })
+    return gi
 
 
 @pytest.fixture

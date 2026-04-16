@@ -163,6 +163,11 @@ class rtop(Thread):
         return self._stats.get('fan', {})
 
     @property
+    def power(self):
+        """Return power stats (None when the board exposes no sensors)."""
+        return self._stats.get('power', {})
+
+    @property
     def hardware(self):
         """Return hardware info."""
         return self._stats.get('hardware', {})
@@ -220,6 +225,7 @@ class StandaloneRtop(object):
         self._memory_svc = None
         self._temperature_svc = None
         self._fan_svc = None
+        self._power_svc = None
         self._hardware = {}
         self._platform = {}
         # Lazy-init flag
@@ -270,6 +276,11 @@ class StandaloneRtop(object):
             self._fan_svc = FanService()
         except Exception as e:
             logger.warning("Fan service init failed: %s", e)
+        try:
+            from .core.power import PowerService
+            self._power_svc = PowerService()
+        except Exception as e:
+            logger.warning("Power service init failed: %s", e)
         try:
             from .core.hardware import get_hardware, get_platform_variables
             self._hardware = get_hardware()
@@ -327,6 +338,11 @@ class StandaloneRtop(object):
                 raw['fan'] = self._fan_svc.get_status()
             except Exception as e:
                 logger.debug("Fan read error: %s", e)
+        if self._power_svc:
+            try:
+                raw['power'] = self._power_svc.get_status()
+            except Exception as e:
+                logger.debug("Power read error: %s", e)
 
         raw['hardware'] = self._hardware
         raw['platform'] = self._platform
@@ -469,6 +485,7 @@ class StandaloneRtop(object):
                 'free': mem_raw.get('cma_free', 0),
             }
             mem['shmem'] = {'total': mem_raw.get('shmem', 0)}
+            mem['storage'] = mem_raw.get('storage', [])
             stats['memory'] = mem
         else:
             stats['memory'] = {}
@@ -510,6 +527,9 @@ class StandaloneRtop(object):
             stats['fan'] = fan
         else:
             stats['fan'] = {}
+
+        # === Power ===
+        stats['power'] = raw.get('power') or {}
 
         # === Static data ===
         stats['uptime'] = raw.get('uptime', 0)
@@ -569,6 +589,10 @@ class StandaloneRtop(object):
     @property
     def fan(self):
         return self._stats.get('fan', {})
+
+    @property
+    def power(self):
+        return self._stats.get('power', {})
 
     @property
     def hardware(self):

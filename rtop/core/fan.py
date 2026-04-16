@@ -100,8 +100,14 @@ class Fan(GenericInterface):
                     }
                     # Try to find tachometer (RPM)
                     fan_input = os.path.join(hwmon_path, "fan{}_input".format(pwm_num))
-                    if os.path.isfile(fan_input):
+                    has_rpm = os.path.isfile(fan_input)
+                    if has_rpm:
                         fan_info['rpm_path'] = fan_input
+                    has_enable = os.path.isfile(fan_info['enable_path'])
+                    # Only register if there's evidence of a real fan (RPM or enable)
+                    if not has_rpm and not has_enable:
+                        logger.info("Skipping PWM %s at %s: no RPM or enable file", pwm_num, hwmon_path)
+                        continue
                     fans["fan{}".format(pwm_num)] = fan_info
                     logger.info("Found PWM fan %s at %s", pwm_num, hwmon_path)
         return fans

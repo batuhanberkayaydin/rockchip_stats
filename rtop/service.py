@@ -39,6 +39,7 @@ from .core.rga import RGAService
 from .core.mpp import MPPService
 from .core.temperature import TemperatureService
 from .core.fan import FanService
+from .core.power import PowerService
 
 import multiprocessing
 multiprocessing.set_start_method("fork", force=True)
@@ -74,6 +75,7 @@ class RtopServer(object):
         self._memory = MemoryService()
         self._temperature = TemperatureService()
         self._fan = FanService()
+        self._power = PowerService()
         self._processes = ProcessService()
         # Hardware info (static, read once)
         self._hardware = get_hardware()
@@ -92,6 +94,7 @@ class RtopServer(object):
         stats['memory'] = self._memory.get_status()
         stats['temperature'] = self._temperature.get_status()
         stats['fan'] = self._fan.get_status()
+        stats['power'] = self._power.get_status()
         stats['processes'] = self._processes.get_status()
         stats['hardware'] = self._hardware
         stats['platform'] = self._platform

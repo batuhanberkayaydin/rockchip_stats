@@ -71,6 +71,35 @@ sudo pip3 install --break-system-packages -U rockchip-stats
 
 ---
 
+## Development / Debug (kurulum olmadan çalıştırma)
+
+Projeyi kurmadan kaynak koddan doğrudan çalıştırmak için:
+
+```console
+cd rockchip_stats
+python3 -m rtop
+```
+
+Debug log çıktısı ile çalıştırmak için:
+
+```console
+python3 -m rtop --debug
+```
+
+Servis olmadan (socket bağlantısı kurmadan) çalıştırmak için:
+
+```console
+python3 -m rtop --no-service --debug
+```
+
+Servisi manuel olarak başlatmak için:
+
+```console
+sudo python3 -m rtop --force
+```
+
+---
+
 ## Run
 
 Start rtop by simply typing `rtop`:

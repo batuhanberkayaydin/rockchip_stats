@@ -54,16 +54,33 @@ def _is_docker():
 def _auto_install_if_needed():
     """Ensure the rtop system service is installed and running."""
     service_path = '/etc/systemd/system/rtop.service'
-    if os.getuid() != 0:
+    socket_path = '/run/rtop.sock'
+
+    # Service already running
+    if os.path.exists(socket_path):
         return
-    if not os.path.isfile(service_path):
-        logger.info("rtop service not found, installing...")
-        try:
-            from .service import install_service
-            folder = os.path.dirname(os.path.realpath(__file__))
-            install_service(folder, copy=True)
-        except Exception as e:
-            logger.warning("Failed to auto-install service: %s", e)
+
+    if os.getuid() == 0 and not _is_docker() and not _is_virtualenv():
+        # Running as root — install service automatically
+        if not os.path.isfile(service_path):
+            logger.info("rtop service not found, installing...")
+            try:
+                from .service import install_service, set_service_permission
+                folder = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+                set_service_permission()
+                install_service(folder, copy=True)
+            except Exception as e:
+                logger.warning("Failed to auto-install service: %s", e)
+        else:
+            try:
+                import subprocess
+                subprocess.call(['systemctl', 'start', 'rtop.service'])
+            except Exception:
+                pass
+    elif os.getuid() != 0:
+        print(bcolors.yellow("Warning:") + " rtop service is not running.")
+        print("Start it with: " + bcolors.bold("sudo systemctl start rtop"))
+        print("Or install with: " + bcolors.bold("sudo pip3 install -U rockchip-stats"))
 
 
 def main():

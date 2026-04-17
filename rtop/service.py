@@ -21,6 +21,8 @@ and client connections (GUI, API, etc.).
 """
 
 import os
+import stat
+import grp
 import shutil
 import logging
 from multiprocessing import Queue, Event
@@ -109,6 +111,13 @@ class RtopServer(object):
 
         manager = StatsManager(address=pipe_path)
         server = manager.get_server()
+        # Set socket ownership and permissions so rtop group members can connect
+        try:
+            gid = grp.getgrnam('rtop').gr_gid
+            os.chown(pipe_path, os.getuid(), gid)
+            os.chmod(pipe_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP)
+        except (KeyError, OSError):
+            pass
         server.serve_forever()
 
 

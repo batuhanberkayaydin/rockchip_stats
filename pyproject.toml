@@ -10,7 +10,8 @@ readme = "README.md"
 authors = [
     {name = "Batuhan Berkay Aydın", email = "batuhanberkayaydin@gmail.com"},
 ]
-license = {text = "AGPL-3.0"}
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 keywords = [
     "rockchip_stats",
     "rtop",
@@ -45,7 +46,6 @@ classifiers = [
     "Topic :: System :: Shells",
     "Topic :: System :: Systems Administration",
     "Topic :: Terminals",
-    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Unix Shell",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.7",

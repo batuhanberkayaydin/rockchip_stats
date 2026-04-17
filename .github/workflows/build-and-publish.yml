@@ -38,7 +38,7 @@ jobs:
       image: python:${{ matrix.python-version }}-slim
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
 
     steps:
       - run: echo "Branch $GITHUB_REF"
@@ -50,7 +50,7 @@ jobs:
       - name: Display Python version
         run: python -c "import sys; print(sys.version)"
       - name: Test with tox
-        run: tox -e py${{ fromJSON('{"3.8":"38","3.9":"39","3.10":"310","3.11":"311","3.12":"312","3.13":"313"}')[matrix.python-version] }}
+        run: tox -e py${{ fromJSON('{"3.9":"39","3.10":"310","3.11":"311","3.12":"312","3.13":"313"}')[matrix.python-version] }}
 
   create_tag:
     name: Create version tag

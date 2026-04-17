@@ -19,7 +19,6 @@ Returns list of dicts sorted by CPU usage.
 """
 
 import os
-import re
 import logging
 
 logger = logging.getLogger(__name__)
@@ -84,22 +83,18 @@ def get_processes(max_count=10):
         if not stat:
             continue
 
-        # Parse /proc/pid/stat
-        # Format: pid (comm) state ppid ... utime stime ... priority nice ... starttime vsize rss
+        # Parse /proc/pid/stat. comm (field 2) is parenthesized and may contain
+        # spaces or ')' — split around the last ')' to stay robust.
         try:
-            # Find comm between first ( and last ) to handle spaces in name
-            m = re.match(
-                r'^(\d+)\s+\((.+)\)\s+(\S+)\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+(\d+)\s+(\d+)\s+\S+\s+\S+\s+(-?\d+)\s+(-?\d+)\s+\S+\s+\S+\s+\S+\s+(\d+)\s+\S+\s+(\d+)',
-                stat)
-            if not m:
-                continue
-            comm = m.group(2)
-            state = m.group(3)
-            utime = int(m.group(4))
-            stime = int(m.group(5))
-            priority = int(m.group(6))
-            # nice = int(m.group(7))
-            rss = int(m.group(9))   # in pages
+            rparen = stat.rindex(')')
+            comm = stat[stat.index('(') + 1:rparen]
+            # fields 3..52 after the last ')'
+            rest = stat[rparen + 2:].split()
+            state = rest[0]                # field 3
+            utime = int(rest[14 - 3])      # field 14
+            stime = int(rest[15 - 3])      # field 15
+            priority = int(rest[18 - 3])   # field 18
+            rss = int(rest[24 - 3])        # field 24, in pages
         except Exception:
             continue
 

@@ -73,5 +73,9 @@ class ProcessService(object):
         pass
 
     def get_status(self):
-        """Get current process table."""
-        return read_process_table()
+        """Return top processes in the format the GUI's process_table expects.
+
+        Keys: pid, user, pri, stat, cpu, mem, mem_str, cmd
+        """
+        from .process import get_processes
+        return get_processes()

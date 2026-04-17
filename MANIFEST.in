@@ -22,3 +22,10 @@ exclude Dockerfile
 exclude .dockerignore
 prune docs
 prune examples
+
+# IMPORTANT: exclude pyproject.toml from the sdist.
+# With pyproject.toml present, pip treats the package as PEP 517 and skips
+# our setup.py `install` command — which is exactly where we auto-install
+# the systemd service. Omitting it from the sdist forces legacy setup.py
+# mode at install time, matching what jetson_stats ships on PyPI.
+exclude pyproject.toml

@@ -15,14 +15,14 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>
 
 """
-Minimal setup.py for backward compatibility and custom install commands.
-Main configuration is in pyproject.toml (PEP 517/518/621 compliant).
+setup.py exists only so that `pip install` from an sdist can run our custom
+install command and auto-install the systemd service. All package metadata
+lives in pyproject.toml (PEP 621).
 """
 
 from setuptools import setup
-from setuptools.command.develop import develop
 from setuptools.command.install import install
-from setuptools.command.build_py import build_py
+from setuptools.command.develop import develop
 import os
 import sys
 import shutil
@@ -33,163 +33,166 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger()
 
 
-def is_virtualenv():
+def _is_virtualenv():
     has_real_prefix = hasattr(sys, 'real_prefix')
-    has_base_prefix = (
-        hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix
-    )
+    has_base_prefix = hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix
     return bool(has_real_prefix or has_base_prefix)
 
 
-def is_docker():
-    if os.path.exists('/.dockerenv'):
-        return True
-    if os.path.exists('/run/.containerenv'):
+def _is_docker():
+    # Only trust unambiguous signals. /proc/self/mountinfo is NOT reliable on a
+    # Docker host (it sees every container's overlay mount), so we avoid it.
+    if os.path.exists('/.dockerenv') or os.path.exists('/run/.containerenv'):
         return True
     if os.environ.get('container'):
         return True
+    # cgroup of THIS process — the host's own cgroup won't contain 'docker'
+    # unless the process is literally inside a container.
     path = '/proc/self/cgroup'
     if os.path.isfile(path):
         with open(path) as f:
             for line in f:
-                if 'docker' in line or 'buildkit' in line or 'containerd' in line:
+                if any(tok in line for tok in ('/docker/', '/buildkit/', '/containerd/')):
                     return True
-    mountinfo = '/proc/self/mountinfo'
-    if os.path.isfile(mountinfo):
-        with open(mountinfo) as f:
-            for line in f:
-                if '/docker/' in line or '/buildkit/' in line or '/containerd/' in line:
-                    return True
-    if not shutil.which('systemctl'):
-        return True
     return False
 
 
-def is_superuser():
+def _is_superuser():
     return os.getuid() == 0
 
 
 def _systemctl(*args):
-    """Run systemctl if available, otherwise log and skip."""
     if shutil.which('systemctl'):
         return sp_mod.call(['systemctl'] + list(args))
-    log.warning("systemctl not found, skipping: systemctl %s", ' '.join(args))
     return 1
 
 
-def _run_service_install(source_folder):
-    """Install rtop system service and config files."""
+def _install_service(source_folder):
+    """Install the rtop systemd unit, env script, group, and start the service."""
     service_src = os.path.join(source_folder, 'services', 'rtop.service')
     service_dst = '/etc/systemd/system/rtop.service'
     env_src = os.path.join(source_folder, 'scripts', 'rtop_env.sh')
     env_dst = '/etc/profile.d/rtop_env.sh'
     pipe_path = '/run/rtop.sock'
 
-    # Uninstall previous service
+    # Stop / remove any previous install
     if os.path.isfile(service_dst) or os.path.islink(service_dst):
         _systemctl('stop', 'rtop.service')
         _systemctl('disable', 'rtop.service')
-        os.remove(service_dst)
+        try:
+            os.remove(service_dst)
+        except OSError:
+            pass
         _systemctl('daemon-reload')
-    if os.path.isdir(pipe_path):
-        shutil.rmtree(pipe_path)
-    elif os.path.exists(pipe_path):
-        os.remove(pipe_path)
+    if os.path.exists(pipe_path):
+        try:
+            if os.path.isdir(pipe_path):
+                shutil.rmtree(pipe_path)
+            else:
+                os.remove(pipe_path)
+        except OSError:
+            pass
     if os.path.isfile(env_dst):
-        os.remove(env_dst)
+        try:
+            os.remove(env_dst)
+        except OSError:
+            pass
 
-    # Install service file
+    # Group first, so the socket can be chgrp'd when the service starts
+    sp_mod.call(['groupadd', '-f', 'rtop'])
+    user = os.environ.get('SUDO_USER', '') or 'root'
+    sp_mod.call(['usermod', '-a', '-G', 'rtop', user])
+
     if os.path.isfile(service_src):
         shutil.copy2(service_src, service_dst)
         log.info("Installed %s -> %s", service_src, service_dst)
         _systemctl('daemon-reload')
         _systemctl('enable', 'rtop.service')
         _systemctl('start', 'rtop.service')
+    else:
+        log.warning("rtop.service source not found at %s", service_src)
 
-    # Install env script
     if os.path.isfile(env_src):
         shutil.copy2(env_src, env_dst)
         log.info("Installed %s -> %s", env_src, env_dst)
 
-    # Set permissions
-    user = os.environ.get('SUDO_USER', '') or 'root'
-    sp_mod.call(['groupadd', 'rtop'])
-    sp_mod.call(['usermod', '-a', '-G', 'rtop', user])
 
-
-class RTOPBuildPy(build_py):
-    """Extend build_py to install system service during PEP 517 builds."""
-
-    def run(self):
-        build_py.run(self)
-        if is_superuser() and not is_docker():
-            folder = os.path.dirname(os.path.realpath(__file__))
-            log.info("Installing rtop system service...")
-            _run_service_install(folder)
-
-
-def pypi_installer(installer, obj, copy):
-    """Main installation function for rtop services."""
-    try:
-        from rtop.service import status_service, remove_service_pipe, uninstall_service, set_service_permission, install_service
-        from rtop.terminal_colors import bcolors
-    except ImportError:
-        installer.run(obj)
+def _maybe_install_service():
+    """Only run service install on a real host, as root, outside containers."""
+    if _is_virtualenv() or _is_docker() or not _is_superuser():
+        log.info("Skip rtop service install (virtualenv/docker/non-root)")
         return
-
-    log.info("Install status:")
-    log.info(f" - [{'X' if is_superuser() else ' '}] super_user")
-    log.info(f" - [{'X' if is_virtualenv() else ' '}] virtualenv")
-    log.info(f" - [{'X' if is_docker() else ' '}] docker")
-
-    if not is_virtualenv() and not is_docker():
-        if is_superuser():
-            uninstall_service()
-            remove_service_pipe()
-        else:
-            log.info("----------------------------------------")
-            log.info("Install on your host using superuser permission, like:")
-            log.info(bcolors.bold("sudo pip3 install -U rockchip-stats"))
-            sys.exit(1)
-    elif is_docker():
-        log.info("Skip uninstall in docker")
-    else:
-        if not is_superuser() and not status_service():
-            log.info("----------------------------------------")
-            log.info("Please, before install in your virtual environment, install rockchip-stats on your host with superuser permission:")
-            log.info(bcolors.bold("sudo pip3 install -U rockchip-stats"))
-            sys.exit(1)
-
-    installer.run(obj)
-
-    if not is_virtualenv() and not is_docker() and is_superuser():
-        folder, _ = os.path.split(os.path.realpath(__file__))
-        set_service_permission()
-        install_service(folder, copy=copy)
-    else:
-        log.info("Skip install service")
+    folder = os.path.dirname(os.path.realpath(__file__))
+    log.info("Installing rtop systemd service...")
+    _install_service(folder)
 
 
-class RTOPInstallCommand(install):
-    """Custom installation command for production install."""
-
+class RTOPInstall(install):
     def run(self):
-        pypi_installer(install, self, True)
+        install.run(self)
+        _maybe_install_service()
 
 
-class RTOPDevelopCommand(develop):
-    """Custom installation command for development mode."""
-
+class RTOPDevelop(develop):
     def run(self):
-        pypi_installer(develop, self, False)
+        develop.run(self)
+        _maybe_install_service()
 
 
-if __name__ == '__main__':
-    setup(
-        cmdclass={
-            'build_py': RTOPBuildPy,
-            'develop': RTOPDevelopCommand,
-            'install': RTOPInstallCommand,
-        },
-        data_files=[('rockchip_stats', ['services/rtop.service', 'scripts/rtop_env.sh'])],
-    )
+# Read version from rtop/__init__.py without importing it.
+def _read_version():
+    import re
+    here = os.path.dirname(os.path.realpath(__file__))
+    with open(os.path.join(here, 'rtop', '__init__.py')) as f:
+        m = re.search(r"""^__version__\s*=\s*["'](.+?)["']""", f.read(), re.M)
+        return m.group(1) if m else '0.0.0'
+
+
+def _read_long_description():
+    here = os.path.dirname(os.path.realpath(__file__))
+    readme = os.path.join(here, 'README.md')
+    if os.path.isfile(readme):
+        with open(readme, encoding='utf-8') as f:
+            return f.read()
+    return ''
+
+
+setup(
+    name='rockchip-stats',
+    version=_read_version(),
+    description='Interactive system-monitor and process viewer for Rockchip SoC devices [RK3588, RK3588S, RK3568, RK3566, RK3399]',
+    long_description=_read_long_description(),
+    long_description_content_type='text/markdown',
+    author='Batuhan Berkay Aydın',
+    author_email='batuhanberkayaydin@gmail.com',
+    url='https://github.com/batuhanberkayaydin/rockchip_stats',
+    license='AGPL-3.0-or-later',
+    python_requires='>=3.9',
+    packages=['rtop', 'rtop.core', 'rtop.gui', 'rtop.gui.lib'],
+    include_package_data=True,
+    install_requires=['distro'],
+    entry_points={
+        'console_scripts': [
+            'rtop = rtop.__main__:main',
+            'rockchip_release = rtop.rockchip_release:main',
+        ],
+    },
+    data_files=[('share/rockchip_stats', ['services/rtop.service', 'scripts/rtop_env.sh'])],
+    zip_safe=False,
+    classifiers=[
+        'Development Status :: 3 - Alpha',
+        'Intended Audience :: Developers',
+        'Operating System :: POSIX :: Linux',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+        'Topic :: System :: Monitoring',
+    ],
+    cmdclass={
+        'install': RTOPInstall,
+        'develop': RTOPDevelop,
+    },
+)

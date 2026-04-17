@@ -40,27 +40,27 @@ def _is_virtualenv():
 
 
 def _is_docker():
-    if os.path.exists('/.dockerenv'):
+    if os.path.exists('/.dockerenv') or os.path.exists('/run/.containerenv'):
+        return True
+    if os.environ.get('container'):
         return True
     cgroup = '/proc/self/cgroup'
     if os.path.isfile(cgroup):
         with open(cgroup) as f:
             for line in f:
-                if 'docker' in line or 'buildkit' in line:
+                if any(tok in line for tok in ('/docker/', '/buildkit/', '/containerd/')):
                     return True
     return False
 
 
 def _auto_install_if_needed():
-    """Ensure the rtop system service is installed and running."""
+    """Ensure the rtop system service is installed and the current shell can
+    reach it. Returns True to proceed with the GUI, False if the caller should
+    exit after printing guidance."""
     service_path = '/etc/systemd/system/rtop.service'
     socket_path = '/run/rtop.sock'
 
     service_installed = os.path.isfile(service_path)
-
-    # If socket exists AND service is properly installed, nothing to do.
-    if os.path.exists(socket_path) and service_installed:
-        return
 
     if os.getuid() == 0 and not _is_docker() and not _is_virtualenv():
         # Running as root — install or repair the service automatically.
@@ -70,15 +70,34 @@ def _auto_install_if_needed():
                 logger.info("rtop service not found, installing...")
                 set_service_permission()
                 install_service()
-            else:
+            elif not os.path.exists(socket_path):
                 import subprocess
                 subprocess.call(['systemctl', 'start', 'rtop.service'])
         except Exception as e:
             logger.warning("Failed to auto-install service: %s", e)
-    elif os.getuid() != 0 and not os.path.exists(socket_path):
-        print(bcolors.yellow("Warning:") + " rtop service is not running.")
-        print("Start it with: " + bcolors.bold("sudo systemctl start rtop"))
-        print("Or install with: " + bcolors.bold("sudo pip3 install -U rockchip-stats"))
+        return True
+
+    if os.getuid() != 0:
+        # Non-root: catch the two common post-install problems and guide the
+        # user instead of letting the GUI render empty NPU/RGA panels.
+        if not os.path.exists(socket_path):
+            print(bcolors.yellow("Warning:") + " rtop service is not running.")
+            print("Install with: " + bcolors.bold("sudo pip3 install -U rockchip-stats"))
+            print("Or start manually: " + bcolors.bold("sudo systemctl start rtop"))
+            return False
+        # Socket is 660 root:rtop — the user needs the rtop gid in their
+        # active credentials. A shell that predates the install will not have
+        # it until a reboot (same UX as jetson_stats).
+        try:
+            import grp
+            rtop_gid = grp.getgrnam('rtop').gr_gid
+            if rtop_gid not in os.getgroups():
+                print(bcolors.yellow("Warning:") + " rtop was just installed.")
+                print("Please " + bcolors.bold("reboot") + " your system to finish the setup.")
+                return False
+        except (KeyError, OSError):
+            pass
+    return True
 
 
 def main():
@@ -112,7 +131,8 @@ def main():
     else:
         # Start as interactive TUI
         if not args.no_service:
-            _auto_install_if_needed()
+            if not _auto_install_if_needed():
+                sys.exit(0)
 
         try:
             from .gui import run_rtop

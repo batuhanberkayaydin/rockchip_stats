@@ -149,10 +149,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install build twine
-      - name: Build package
-        run: python -m build
+      - name: Build sdist only
+        # Only ship the source distribution so that `pip install` runs our
+        # setup.py install hooks (systemd service auto-install). A pre-built
+        # wheel would skip those hooks entirely.
+        run: python -m build --sdist
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+        run: twine upload dist/*.tar.gz

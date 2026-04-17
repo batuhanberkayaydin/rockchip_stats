@@ -4,7 +4,7 @@ After=multi-user.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 -m rtop.service
+ExecStart=/usr/bin/python3 -m rtop --force
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

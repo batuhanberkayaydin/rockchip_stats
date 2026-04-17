@@ -28,7 +28,7 @@ import logging
 from multiprocessing import Queue, Event
 from multiprocessing.managers import SyncManager
 
-from .core.common import get_uptime
+from .core.common import get_uptime, get_key
 from .core.hardware import get_hardware, get_platform_variables
 from .core.config import Config
 from .core.cpu import CPUService
@@ -98,18 +98,39 @@ class RtopServer(object):
 
     def serve(self, pipe_path=SERVICE_SOCKET):
         """Start serving stats via a Unix socket."""
+        import threading
+        import time
         logger.info("Starting rtop server on %s", pipe_path)
-        # Collect initial data
-        data = self._collect()
+        # Remove stale socket from previous run
+        if os.path.exists(pipe_path):
+            try:
+                os.remove(pipe_path)
+            except OSError:
+                pass
+
+        # Shared mutable snapshot — refreshed by a background thread
+        snapshot = {'data': self._collect()}
+
+        def _refresh_loop():
+            while True:
+                try:
+                    snapshot['data'] = self._collect()
+                except Exception as e:
+                    logger.warning("Stats collection failed: %s", e)
+                time.sleep(self._interval)
+
+        refresher = threading.Thread(target=_refresh_loop, daemon=True)
+        refresher.start()
 
         class StatsManager(SyncManager):
             pass
 
-        StatsManager.register('get_stats', callable=lambda: data)
+        StatsManager.register('get_stats', callable=lambda: snapshot['data'])
         StatsManager.register('get_queue', callable=lambda: Queue())
         StatsManager.register('get_event', callable=lambda: Event())
 
-        manager = StatsManager(address=pipe_path)
+        authkey = get_key().encode('utf-8')
+        manager = StatsManager(address=pipe_path, authkey=authkey)
         server = manager.get_server()
         # Set socket ownership and permissions so rtop group members can connect
         try:
@@ -123,7 +144,11 @@ class RtopServer(object):
 
 class RtopManager(SyncManager):
     """Client-side manager for connecting to the rtop service."""
-    pass
+
+    def __init__(self, authkey=None):
+        if authkey is None:
+            authkey = get_key().encode('utf-8')
+        super(RtopManager, self).__init__(address=SERVICE_SOCKET, authkey=authkey)
 
 
 def status_service():

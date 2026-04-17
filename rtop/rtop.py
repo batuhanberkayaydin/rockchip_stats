@@ -75,32 +75,30 @@ class rtop(Thread):
         self._observers = set()
         self._stats = {}
         # Register manager methods
+        RtopManager.register('get_stats')
         RtopManager.register('get_queue')
-        RtopManager.register("sync_data")
-        RtopManager.register('sync_event')
+        RtopManager.register('get_event')
         self._broadcaster = RtopManager()
 
     def run(self):
         """Main thread loop - connect to service and read stats."""
         self._running = True
+        import time
         try:
             self._broadcaster.connect()
-            # Get the data queue
-            queue = self._broadcaster.get_queue()
             while self._running:
                 try:
-                    # Read stats from service
-                    data = queue.get(timeout=self._interval)
-                    self._stats = data
-                    # Notify observers
+                    # Pull a fresh snapshot from the service
+                    self._stats = self._broadcaster.get_stats()._getvalue()
                     for callback in self._observers:
                         try:
                             callback(self._stats)
                         except Exception as e:
                             logger.error("Observer callback error: %s", e)
-                except Exception:
-                    # Timeout - continue loop
-                    pass
+                except Exception as e:
+                    logger.debug("get_stats error: %s", e)
+                self._trigger.wait(self._interval)
+                self._trigger.clear()
         except Exception as e:
             self._error = e
             logger.error("rtop client error: %s", e)
@@ -231,6 +229,9 @@ class StandaloneRtop(object):
         # Lazy-init flag
         self._initialized = False
         self._processes = []
+        # Service client (connected lazily on first use)
+        self._service_client = None
+        self._service_failed = False
 
     def _init_services(self):
         """Initialize all monitoring services (lazy, on first use)."""
@@ -289,8 +290,37 @@ class StandaloneRtop(object):
             logger.warning("Hardware detection failed: %s", e)
         self._initialized = True
 
+    def _try_service(self):
+        """Try to connect to the rtop service socket; return raw stats dict or None."""
+        if self._service_failed:
+            return None
+        import os as _os
+        if not _os.path.exists('/run/rtop.sock'):
+            return None
+        try:
+            if self._service_client is None:
+                RtopManager.register('get_stats')
+                RtopManager.register('get_queue')
+                RtopManager.register('get_event')
+                self._service_client = RtopManager()
+                self._service_client.connect()
+            raw = self._service_client.get_stats()._getvalue()
+            return raw
+        except Exception as e:
+            logger.debug("Service connect failed, falling back to direct read: %s", e)
+            self._service_failed = True
+            self._service_client = None
+            return None
+
     def _collect(self):
-        """Collect all stats directly from services and transform for GUI."""
+        """Collect all stats — prefer service, fall back to direct sysfs reads."""
+        raw = self._try_service()
+        if raw is not None:
+            # Processes live in the same snapshot from the service
+            self._processes = raw.get('processes', []) or []
+            self._stats = self._transform(raw)
+            return
+
         raw = {}
         try:
             from .core.common import get_uptime
@@ -611,7 +641,9 @@ class StandaloneRtop(object):
         return self._interval
 
     def __enter__(self):
-        self._init_services()
+        # Try service first; only spin up direct-read services if that fails.
+        if self._try_service() is None:
+            self._init_services()
         self._collect()
         self._running = True
         return self

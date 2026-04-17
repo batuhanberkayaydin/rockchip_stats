@@ -35,10 +35,18 @@ from .hw_detect import get_rga_debug_path, get_rga_devfreq_path
 
 logger = logging.getLogger(__name__)
 
-# Match: "core0: 12%", "core1: 0%", etc. (case-insensitive)
+# Legacy "core0: 12%" format (older kernels)
 RGA_CORE_REG = re.compile(r'core(\d+):\s*(\d+)%', re.IGNORECASE)
 
-# Match a version tag like "RGA2" or "RGA3" before "load:"
+# Modern scheduler block:
+#   scheduler[0]: rga3_core0
+#       load = 3%
+RGA_SCHED_REG = re.compile(
+    r'scheduler\[(\d+)\]:\s*(\S+).*?load\s*=\s*(\d+)%',
+    re.IGNORECASE | re.DOTALL)
+
+# Version tag — modern output puts the name inside scheduler entries
+# (rga3_core0, rga2, …). Legacy output has "RGA2 load:" / "RGA3 load:".
 RGA_VERSION_REG = re.compile(r'(RGA\w*)\s+load', re.IGNORECASE)
 
 
@@ -69,30 +77,48 @@ class RGAService(object):
         # --- Load ---
         try:
             raw = open(self._debug_path, 'r').read()
-            # Parse version tag (RGA2 / RGA3)
-            ver_match = RGA_VERSION_REG.search(raw)
-            if ver_match:
-                status['version'] = ver_match.group(1).upper()
 
-            # Parse per-core loads
-            core_loads = {}
-            for m in RGA_CORE_REG.finditer(raw):
-                core_loads[int(m.group(1))] = int(m.group(2))
+            # Modern scheduler format. Each scheduler entry carries a name
+            # like "rga3_core0" / "rga2" and a "load = N%" line.
+            sched_loads = {}   # idx -> load
+            sched_names = {}   # idx -> scheduler name
+            for m in RGA_SCHED_REG.finditer(raw):
+                idx = int(m.group(1))
+                sched_names[idx] = m.group(2)
+                sched_loads[idx] = int(m.group(3))
 
-            if core_loads:
-                status['cores'] = [core_loads[k] for k in sorted(core_loads)]
+            if sched_loads:
+                ordered = sorted(sched_loads)
+                status['cores'] = [sched_loads[k] for k in ordered]
+                status['core_names'] = [sched_names[k] for k in ordered]
                 status['load'] = max(status['cores'])
                 status['online'] = True
                 status['active'] = any(v > 0 for v in status['cores'])
+                # Version from first scheduler name (rga3_core0 -> RGA3)
+                first = sched_names[ordered[0]].upper()
+                vm = re.match(r'(RGA\d+)', first)
+                status['version'] = vm.group(1) if vm else first
             else:
-                # Fallback: try single bare percentage
-                bare = re.search(r'(\d+)%', raw)
-                if bare:
-                    v = int(bare.group(1))
-                    status['cores'] = [v]
-                    status['load'] = v
+                # Legacy "RGA2 load: core0: 0%, core1: 0%" format
+                ver_match = RGA_VERSION_REG.search(raw)
+                if ver_match:
+                    status['version'] = ver_match.group(1).upper()
+                core_loads = {}
+                for m in RGA_CORE_REG.finditer(raw):
+                    core_loads[int(m.group(1))] = int(m.group(2))
+                if core_loads:
+                    status['cores'] = [core_loads[k] for k in sorted(core_loads)]
+                    status['load'] = max(status['cores'])
                     status['online'] = True
-                    status['active'] = v > 0
+                    status['active'] = any(v > 0 for v in status['cores'])
+                else:
+                    bare = re.search(r'(\d+)%', raw)
+                    if bare:
+                        v = int(bare.group(1))
+                        status['cores'] = [v]
+                        status['load'] = v
+                        status['online'] = True
+                        status['active'] = v > 0
         except (IOError, PermissionError):
             logger.debug("Cannot read RGA load (needs root)")
             status['load'] = -1   # permission flag for GUI

@@ -66,9 +66,8 @@ def _auto_install_if_needed():
             logger.info("rtop service not found, installing...")
             try:
                 from .service import install_service, set_service_permission
-                folder = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
                 set_service_permission()
-                install_service(folder, copy=True)
+                install_service()
             except Exception as e:
                 logger.warning("Failed to auto-install service: %s", e)
         else:

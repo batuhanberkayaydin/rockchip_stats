@@ -152,17 +152,39 @@ def uninstall_service():
         sp.call(['systemctl', 'daemon-reload'])
 
 
-def install_service(folder, copy=True):
+def _find_service_file():
+    """Find rtop.service in known installation locations."""
+    candidates = [
+        '/usr/local/share/rockchip_stats/rtop.service',
+        '/usr/share/rockchip_stats/rtop.service',
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def install_service(folder=None, copy=True):
     """Install the rtop systemd service."""
-    import shutil
-    service_src = os.path.join(folder, 'services', 'rtop.service')
+    import subprocess as sp
     service_dst = '/etc/systemd/system/rtop.service'
-    if os.path.isfile(service_src):
-        shutil.copy2(service_src, service_dst)
-        import subprocess as sp
-        sp.call(['systemctl', 'daemon-reload'])
-        sp.call(['systemctl', 'enable', 'rtop.service'])
-        sp.call(['systemctl', 'start', 'rtop.service'])
+
+    # Try known wheel install locations first, then fall back to source folder
+    service_src = _find_service_file()
+    if service_src is None and folder:
+        candidate = os.path.join(folder, 'services', 'rtop.service')
+        if os.path.isfile(candidate):
+            service_src = candidate
+
+    if service_src is None:
+        logger.warning("rtop.service not found, skipping service install")
+        return
+
+    shutil.copy2(service_src, service_dst)
+    logger.info("Installed %s -> %s", service_src, service_dst)
+    sp.call(['systemctl', 'daemon-reload'])
+    sp.call(['systemctl', 'enable', 'rtop.service'])
+    sp.call(['systemctl', 'start', 'rtop.service'])
 
 
 def set_service_permission():

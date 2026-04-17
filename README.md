@@ -59,7 +59,7 @@ sudo pip3 install -U rockchip-stats
 
 ### Option 2: Install from source
 ```console
-git clone https://github.com/your-repo/rockchip_stats.git
+git clone https://github.com/batuhanberkayaydin/rockchip_stats.git
 cd rockchip_stats
 sudo pip3 install .
 ```
@@ -71,28 +71,28 @@ sudo pip3 install --break-system-packages -U rockchip-stats
 
 ---
 
-## Development / Debug (kurulum olmadan çalıştırma)
+## Development / Debug
 
-Projeyi kurmadan kaynak koddan doğrudan çalıştırmak için:
+Run directly from source without installing:
 
 ```console
 cd rockchip_stats
 python3 -m rtop
 ```
 
-Debug log çıktısı ile çalıştırmak için:
+Run with debug log output:
 
 ```console
 python3 -m rtop --debug
 ```
 
-Servis olmadan (socket bağlantısı kurmadan) çalıştırmak için:
+Run without service (no socket connection):
 
 ```console
 python3 -m rtop --no-service --debug
 ```
 
-Servisi manuel olarak başlatmak için:
+Start the service manually:
 
 ```console
 sudo python3 -m rtop --force
@@ -173,7 +173,7 @@ You can run rtop directly in Docker:
 You can pull the pre-built image from GitHub Container Registry (GHCR):
 
 ```console
-docker run --rm -it -v /run/rtop.sock:/run/rtop.sock ghcr.io/<your-github-username>/rockchip-stats:latest
+docker run --rm -it -v /run/rtop.sock:/run/rtop.sock ghcr.io/batuhanberkayaydin/rockchip_stats:latest
 ```
 ## Architecture
 
@@ -193,9 +193,16 @@ rockchip-stats uses a client-server model:
 
 The background service (`rtop.service`) runs as root to access debugfs paths (NPU load, RGA load) and serves data via a Unix domain socket. The client connects and displays the data.
 
-## Documentation
+## Examples
 
-More documentation available at the project repository.
+The [`examples/`](https://github.com/batuhanberkayaydin/rockchip_stats/tree/master/examples) directory contains ready-to-run scripts:
+
+| File | Description |
+|------|-------------|
+| `quick_read.py` | Read all stats in a single snapshot |
+| `rtop_cpu.py` | Monitor CPU load and frequency per core |
+| `rtop_npu.py` | Monitor NPU core utilization |
+| `rtop_server.py` | Run rtop as a background data server |
 
 ## License
 

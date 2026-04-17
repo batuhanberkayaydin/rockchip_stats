@@ -206,7 +206,17 @@ The [`examples/`](https://github.com/batuhanberkayaydin/rockchip_stats/tree/mast
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+See the [LICENSE](LICENSE) file for the full license text.
 
-Inspired by jetson_stats by rbonghi
+---
+
+## Acknowledgements
+
+This project is based on and inspired by **jetson_stats** by rbonghi:
 https://github.com/rbonghi/jetson_stats
+
+The original project provides monitoring and control utilities for NVIDIA Jetson devices.
+This repository extends similar concepts and functionality to support Rockchip SoCs.
+
+Significant modifications, refactoring, and new features have been implemented to adapt the design for Rockchip platforms.

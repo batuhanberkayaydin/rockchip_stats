@@ -25,4 +25,4 @@ __email__ = "batuhanberkayaydin@gmail.com"
 __copyright__ = "(c) 2026, Batuhan Berkay Aydın"
 __cr__ = "(c) 2026, BBA"
 # Version package
-__version__ = "0.1.2"
+__version__ = "0.1.3"

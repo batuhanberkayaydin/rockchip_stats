@@ -67,8 +67,11 @@ def _draw_mpp_core(stdscr, y, x, size, name, info, show_tasks=False):
     label = info.get('label', name.upper())
 
     if active:
-        if show_tasks and isinstance(task_count, int) and task_count > 0:
-            center_label = '{} task{}'.format(task_count, 's' if task_count != 1 else '')
+        if show_tasks and isinstance(task_count, int):
+            if task_count > 0:
+                center_label = '{} task{}'.format(task_count, 's' if task_count != 1 else '')
+            else:
+                center_label = 'ON'
         else:
             center_label = 'ON'
         color = NColors.green()

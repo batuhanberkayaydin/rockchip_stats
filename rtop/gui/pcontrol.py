@@ -89,6 +89,7 @@ def _draw_section(stdscr, y, x, title):
 
 
 _NON_FAN_COOLING_TYPES = ('thermal-cpufreq', 'thermal-devfreq', 'cpufreq', 'devfreq')
+_FAN_COOLING_TYPES = ('fan', 'pwm-fan', 'gpio-fan')
 
 
 def _classify_fan_entry(name, info):
@@ -102,20 +103,26 @@ def _classify_fan_entry(name, info):
     if not isinstance(info, dict):
         return None
     if 'speed' in info or 'pwm' in info:
+        rpm = info.get('rpm', None)
+        level = info.get('level', None)  # MCU fan level (0-3)
         return (
             'pwm',
             float(info.get('speed', 0)),
-            info.get('rpm', None),
-            None,
+            rpm,
+            level,
             None,
         )
-    if 'cur_state' in info and 'max_state' in info:
+    if 'cur_state' in info or 'max_state' in info:
         dev_type = str(info.get('type', '')).lower()
         if any(dev_type.startswith(t) for t in _NON_FAN_COOLING_TYPES):
             return None  # CPU/GPU governor — not a fan
         cur = int(info.get('cur_state', 0) or 0)
         mx = max(int(info.get('max_state', 0) or 0), 1)
         return ('cooling', cur * 100.0 / mx, None, cur, mx)
+    # cooling_device with only 'type' key (no state yet) — show if it looks like a fan
+    dev_type = str(info.get('type', '')).lower()
+    if any(dev_type.startswith(t) for t in _FAN_COOLING_TYPES):
+        return ('cooling', 0.0, None, 0, 1)
     return None
 
 
@@ -152,7 +159,6 @@ def draw_fans(stdscr, y, x, width, fan):
     """Render every detected fan/cooling device with a speed gauge + RPM."""
     if not fan:
         return y
-    y = _draw_section(stdscr, y, x, "Fans")
     entries = [(n, _classify_fan_entry(n, i)) for n, i in fan.items()]
     entries = [(n, k) for n, k in entries if k is not None]
     if not entries:
@@ -169,6 +175,8 @@ def draw_fans(stdscr, y, x, width, fan):
             right = '{:.0f}%'.format(pct)
             if isinstance(rpm, (int, float)) and rpm > 0:
                 right += ' / {}RPM'.format(int(rpm))
+            elif isinstance(state, int):
+                right += ' / Lv{}'.format(state)
         else:
             right = '{}/{}'.format(state, max_state)
 

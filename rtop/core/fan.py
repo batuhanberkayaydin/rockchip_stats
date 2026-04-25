@@ -21,6 +21,7 @@ Supports PWM fan control via hwmon and cooling device state via thermal subsyste
 """
 
 import os
+import re
 import logging
 from .common import cat, GenericInterface
 
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 FAN_PWM_CAP = 255
 COOLING_DEVICE_PATH = "/sys/class/thermal/cooling_device"
 HWMON_PATH = "/sys/class/hwmon"
+MCU_FAN_PATH = "/sys/class/fan"
 
 
 def ValueToPWM(value, pwm_cap=FAN_PWM_CAP):
@@ -49,8 +51,10 @@ class Fan(GenericInterface):
         super(Fan, self).__init__()
         self._cooling_devices = self._detect_cooling_devices()
         self._pwm_fans = self._detect_pwm_fans()
-        logger.info("Cooling devices: %d, PWM fans: %d",
-                    len(self._cooling_devices), len(self._pwm_fans))
+        self._mcu_fan = self._detect_mcu_fan()
+        logger.info("Cooling devices: %d, PWM fans: %d, MCU fan: %s",
+                    len(self._cooling_devices), len(self._pwm_fans),
+                    self._mcu_fan is not None)
 
     def _detect_cooling_devices(self):
         """Detect all cooling devices."""
@@ -112,6 +116,30 @@ class Fan(GenericInterface):
                     logger.info("Found PWM fan %s at %s", pwm_num, hwmon_path)
         return fans
 
+    def _detect_mcu_fan(self):
+        """Detect MCU-controlled fan at /sys/class/fan (Khadas and similar boards)."""
+        if not os.path.isdir(MCU_FAN_PATH):
+            return None
+        required = ('enable', 'level', 'mode')
+        if all(os.path.isfile(os.path.join(MCU_FAN_PATH, f)) for f in required):
+            logger.info("Found MCU fan at %s", MCU_FAN_PATH)
+            return MCU_FAN_PATH
+        return None
+
+    def _read_mcu_fan(self):
+        """Read MCU fan status. Values may be in format 'Fan level: 2' or plain '2'."""
+        result = {}
+        for fname in ('enable', 'level', 'mode'):
+            fpath = os.path.join(self._mcu_fan, fname)
+            try:
+                raw = cat(fpath).strip()
+                # Format: "Fan level: 2" or just "2"
+                m = re.search(r':\s*(\d+)', raw)
+                result[fname] = int(m.group(1)) if m else int(raw.split()[-1])
+            except (IOError, ValueError, IndexError):
+                pass
+        return result
+
     def get_status(self):
         """Get current fan/cooling status."""
         status = {}
@@ -144,6 +172,23 @@ class Fan(GenericInterface):
                 pass
             if fan_status:
                 status[name] = fan_status
+
+        # Generic /sys/class/fan (MCU-controlled fans — Khadas and similar boards)
+        # Only use if no real PWM fan was found (cooling_device entries don't count)
+        if self._mcu_fan and not self._pwm_fans:
+            mcu = self._read_mcu_fan()
+            if mcu:
+                level = mcu.get('level', 0)
+                enabled = mcu.get('enable', 0)
+                # level 0-3 → speed percentage (0, 33, 66, 100)
+                max_level = 3
+                speed_pct = level * 100.0 / max_level if enabled else 0.0
+                status['fan'] = {
+                    'speed': speed_pct,
+                    'level': level,
+                    'mode': mcu.get('mode', 0),
+                    'enabled': enabled,
+                }
 
         return status
 

@@ -115,6 +115,7 @@ class MPPService(object):
     def __init__(self):
         self._mpp_path = get_mpp_path()
         self._cores = get_mpp_cores()
+        self._prev_task_counts = {}  # core_name -> last seen task_count value
         if self._mpp_path:
             logger.info("MPP path: %s  cores: %s", self._mpp_path, list(self._cores.keys()))
         else:
@@ -151,7 +152,14 @@ class MPPService(object):
 
         for core_name, core_path in self._cores.items():
             tc = _read_task_count(core_path)
-            active = (tc is not None and tc > 0) or _has_active_sessions(core_path)
+            if tc is not None and tc >= 0:
+                # task_count bir toplam sayaç — önceki değerden farklıysa aktif
+                prev = self._prev_task_counts.get(core_name)
+                active = (prev is not None) and (tc != prev)
+                self._prev_task_counts[core_name] = tc
+            else:
+                # task_count dosyası yok (eski kernel), sessions-info'ya bak
+                active = _has_active_sessions(core_path)
             if active:
                 status['any_active'] = True
 

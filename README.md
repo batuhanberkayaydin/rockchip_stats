@@ -4,6 +4,9 @@
 
 </h1>
 
+<img width="1920" height="1094" alt="jetson-stats" src="https://github.com/user-attachments/assets/8d5e6163-13a2-4344-bd01-473009f2fbcb" />
+
+
 **rockchip-stats** is a package for **monitoring** and **control** of Rockchip SoC devices [RK3588, RK3588S, RK3576, RK3568, RK3566, RK3399] series.
 
 rockchip-stats is a powerful tool to analyze your board, you can use it as a stand alone application with `rtop` or import it in your python script. The main features are:

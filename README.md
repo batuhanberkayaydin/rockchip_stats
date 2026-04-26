@@ -1,225 +1,162 @@
-<h1 align="center">
+<h1 align="center">rockchip-stats</h1>
 
-<b>rockchip-stats</b>
+<p align="center">
+  System monitor and control tool for Rockchip SoC devices
+</p>
 
-</h1>
+<p align="center">
+  <img width="1920" alt="rockchip-stats screenshot" src="https://github.com/user-attachments/assets/8d5e6163-13a2-4344-bd01-473009f2fbcb" />
+</p>
 
-<img width="1920" height="1094" alt="jetson-stats" src="https://github.com/user-attachments/assets/8d5e6163-13a2-4344-bd01-473009f2fbcb" />
+---
 
+**rockchip-stats** is a monitoring and control package for Rockchip SoC boards. It can be used as a standalone terminal UI (`rtop`) or imported as a Python library.
 
-**rockchip-stats** is a package for **monitoring** and **control** of Rockchip SoC devices [RK3588, RK3588S, RK3576, RK3568, RK3566, RK3399] series.
+**Features:**
+- Real-time monitoring of CPU, GPU, NPU, RGA, MPP, Memory, Temperature, Fan
+- Fan speed and CPU governor control
+- Board and SoC auto-detection
+- Importable Python library
+- Docker-compatible via Unix socket
+- Graceful degradation — works even when some hardware is absent
 
-rockchip-stats is a powerful tool to analyze your board, you can use it as a stand alone application with `rtop` or import it in your python script. The main features are:
-
-- Decode hardware, SoC model, board identification
-- Monitor CPU, GPU (Mali), NPU, RGA, MPP, Memory, Temperature, Fan
-- Control fan speed, CPU governor
-- Importable in a python script
-- Dockerizable in a container
-- Auto-detects available hardware (graceful degradation)
-- Works with multiple Rockchip SoC variants
+---
 
 ## Supported Hardware
 
-| SoC | CPU | GPU | NPU | Status |
-|-----|-----|-----|-----|--------|
-| RK3588 / RK3588S | 4x A76 + 4x A55 | Mali-G610 | 6 TOPS (3 cores) | ✅ Primary |
-| RK3576 | 4x A72 + 4x A53 | Mali-G52 | 6 TOPS | ✅ Supported |
-| RK3588M | 4x A76 + 4x A55 | Mali-G610 | 6 TOPS (3 cores) | ✅ Supported |
-| RK3582 | 2x A76 + 4x A55 | Mali-G610 | - | ✅ Supported |
-| RK3568 / RK3568J | 4x A55 | Mali-G52 | - | ✅ Supported |
-| RK3566 | 4x A55 | Mali-G52 | - | ✅ Supported |
-| RK3399 / RK3399Pro | 2x A72 + 4x A53 | Mali-T860 | 3 TOPS (Pro only) | ✅ Supported |
+| SoC | CPU | GPU | NPU |
+|-----|-----|-----|-----|
+| RK3588 / RK3588S / RK3588M | 4× A76 + 4× A55 | Mali-G610 | 6 TOPS (3 cores) |
+| RK3582 | 2× A76 + 4× A55 | Mali-G610 | — |
+| RK3576 | 4× A72 + 4× A53 | Mali-G52 | 6 TOPS |
+| RK3568 / RK3568J | 4× A55 | Mali-G52 | — |
+| RK3566 | 4× A55 | Mali-G52 | — |
+| RK3399 / RK3399Pro | 2× A72 + 4× A53 | Mali-T860 | 3 TOPS (Pro only) |
 
-## Monitoring Sources
-
-| Component | Source Path | Notes |
-|-----------|-------------|-------|
-| CPU Load | `/proc/stat` | Per-core and total |
-| CPU Freq | `/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq` | Per-core |
-| GPU Load | `/sys/class/devfreq/fb000000.gpu/load` | Format: `load@freq` |
-| GPU Freq | `/sys/class/devfreq/fb000000.gpu/cur_freq` | |
-| NPU Load | `/sys/kernel/debug/rknpu/load` | Per-core, requires root |
-| NPU Freq | `/sys/class/devfreq/fdab0000.npu/cur_freq` | |
-| RGA Load | `/sys/kernel/debug/rkrga/load` | Requires root |
-| RGA Freq | `/sys/kernel/debug/clk/clk_summary` | Requires root |
-| MPP Sessions | `/proc/mpp_service/sessions-summary` | Video enc/dec cores |
-| Temperature | `/sys/class/thermal/thermal_zone*/temp` | Multiple zones |
-| Fan | `/sys/class/thermal/cooling_device*/cur_state` | + PWM hwmon |
-| Device ID | `/sys/firmware/devicetree/base/compatible` | SoC identification |
+---
 
 ## Install
 
-```console
-sudo apt update
-sudo apt install python3-pip python3-setuptools -y
+```bash
+sudo apt update && sudo apt install python3-pip -y
+sudo pip3 install -U rockchip-stats          # standard
+sudo pip3 install --break-system-packages -U rockchip-stats  # Ubuntu 24.04+
 ```
 
-### Option 1: Install with pip (requires superuser)
-```console
-sudo pip3 install -U rockchip-stats
-```
-
-### Option 2: Install from source
-```console
+**From source:**
+```bash
 git clone https://github.com/batuhanberkayaydin/rockchip_stats.git
 cd rockchip_stats
 sudo pip3 install .
 ```
 
-### Option 3: Ubuntu 24.04+
-```console
-sudo pip3 install --break-system-packages -U rockchip-stats
-```
+After install, reboot once so your user is added to the `rtop` group.
 
 ---
 
-## Development / Debug
+## Usage
 
-Run directly from source without installing:
-
-```console
-cd rockchip_stats
-python3 -m rtop
-```
-
-Run with debug log output:
-
-```console
-python3 -m rtop --debug
-```
-
-Run without service (no socket connection):
-
-```console
-python3 -m rtop --no-service --debug
-```
-
-Start the service manually:
-
-```console
-sudo python3 -m rtop --force
-```
-
----
-
-## Run
-
-Start rtop by simply typing `rtop`:
-
-```console
+```bash
 rtop
 ```
 
-An interactive curses-based interface will appear with 8 pages:
-
 | Key | Page | Description |
 |-----|------|-------------|
-| `1` | ALL | Overview dashboard |
-| `2` | CPU | Per-core CPU details |
-| `3` | GPU | Mali GPU details |
-| `4` | NPU | NPU per-core details |
-| `5` | ENG | RGA, MPP engines |
-| `6` | MEM | RAM, Swap, CMA |
-| `7` | CTRL | Fan & governor control |
-| `8` | INFO | Board & system info |
+| `1` | ALL  | Overview dashboard |
+| `2` | CPU  | Per-core load & frequency |
+| `3` | GPU  | Mali GPU load & frequency |
+| `4` | NPU  | NPU per-core utilization |
+| `5` | ENG  | RGA & MPP hardware engines |
+| `6` | MEM  | RAM, Swap, CMA |
+| `7` | CTRL | Temperature, Fan, Power |
+| `8` | INFO | Board & system information |
 
-## Library
+---
 
-You can use rtop as a Python library to integrate into your software:
+## Python Library
 
 ```python
 from rtop import rtop
 
-with rtop() as rockchip:
-    while rockchip.ok():
-        # Read stats
-        print(rockchip.stats)
+with rtop() as r:
+    while r.ok():
+        cpu = r.cpu
+        gpu = r.gpu
+        print(f"CPU: {cpu.get('total', 0):.1f}%  GPU: {gpu.get('load', 0)}%")
 ```
 
-### Quick Read Example
-
+**Read all sensors once:**
 ```python
 from rtop import rtop
 
-with rtop() as rockchip:
-    if rockchip.ok():
-        # CPU
-        cpu = rockchip.cpu
-        print(f"CPU: {cpu.get('total', 0):.1f}%")
-
-        # GPU
-        gpu = rockchip.gpu
-        if gpu:
-            print(f"GPU: {gpu.get('load', 0)}%")
-
-        # NPU
-        npu = rockchip.npu
-        if npu:
-            for i, core in enumerate(npu.get('cores', [])):
-                print(f"NPU Core{i}: {core.get('load', 0)}%")
-
-        # Temperature
-        for name, val in rockchip.temperature.items():
+with rtop() as r:
+    if r.ok():
+        for name, val in r.temperature.items():
             if isinstance(val, (int, float)):
                 print(f"{name}: {val / 1000:.1f}°C")
+
+        for i, core in enumerate(r.npu.get('cores', [])):
+            print(f"NPU Core{i}: {core.get('load', 0)}%")
 ```
+
+More examples in [`examples/`](https://github.com/batuhanberkayaydin/rockchip_stats/tree/master/examples).
+
+---
 
 ## Docker
 
-You can run rtop directly in Docker:
+Install rockchip-stats on the host, then pass the socket into your container:
 
-1. Install rockchip-stats on your **host**
-2. Install rockchip-stats in your container
-3. Pass `/run/rtop.sock:/run/rtop.sock` to your container
-
-You can pull the pre-built image from GitHub Container Registry (GHCR):
-
-```console
-docker run --rm -it -v /run/rtop.sock:/run/rtop.sock ghcr.io/batuhanberkayaydin/rockchip_stats:latest
+```bash
+docker run --rm -it \
+  -v /run/rtop.sock:/run/rtop.sock \
+  ghcr.io/batuhanberkayaydin/rockchip_stats:latest
 ```
+
+---
+
 ## Architecture
 
-rockchip-stats uses a client-server model:
+rockchip-stats runs as a background service (root) that reads sysfs/procfs/debugfs and exposes data over a Unix socket. The `rtop` client connects to the socket and renders the TUI.
 
 ```
-┌─────────────────┐     Unix Socket      ┌─────────────────┐
-│   rtop (client)  │◄──────────────────►│  rtop (service)  │
-│   curses GUI     │    /run/rtop.sock   │  data collector  │
-└─────────────────┘                      └─────────────────┘
-                                                  │
-                                          ┌───────┴───────┐
-                                          │  sysfs/procfs  │
-                                          │  debugfs       │
-                                          └───────────────┘
+┌──────────────────┐    /run/rtop.sock    ┌──────────────────┐
+│  rtop (client)   │ ◄─────────────────► │  rtop (service)  │
+│  curses TUI      │                      │  data collector  │
+└──────────────────┘                      └────────┬─────────┘
+                                                   │
+                                          sysfs · procfs · debugfs
 ```
 
-The background service (`rtop.service`) runs as root to access debugfs paths (NPU load, RGA load) and serves data via a Unix domain socket. The client connects and displays the data.
+---
 
-## Examples
+## Development
 
-The [`examples/`](https://github.com/batuhanberkayaydin/rockchip_stats/tree/master/examples) directory contains ready-to-run scripts:
+Run directly from the repo without installing:
 
-| File | Description |
-|------|-------------|
-| `quick_read.py` | Read all stats in a single snapshot |
-| `rtop_cpu.py` | Monitor CPU load and frequency per core |
-| `rtop_npu.py` | Monitor NPU core utilization |
-| `rtop_server.py` | Run rtop as a background data server |
+```bash
+sudo python3 -m rtop                        # normal
+sudo python3 -m rtop --debug 2>debug.log    # with debug output
+sudo python3 -m rtop --no-service           # without socket
+sudo python3 -m rtop --force                # start as service
+```
+
+To use repo changes immediately (editable install):
+
+```bash
+sudo pip3 install -e . --break-system-packages
+sudo systemctl restart rtop
+```
+
+---
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
-See the [LICENSE](LICENSE) file for the full license text.
+GNU Affero General Public License v3.0 — see [LICENSE](LICENSE).
 
 ---
 
 ## Acknowledgements
 
-This project is based on and inspired by **jetson_stats** by rbonghi:
-https://github.com/rbonghi/jetson_stats
-
-The original project provides monitoring and control utilities for NVIDIA Jetson devices.
-This repository extends similar concepts and functionality to support Rockchip SoCs.
-
-Significant modifications, refactoring, and new features have been implemented to adapt the design for Rockchip platforms.
+Inspired by [jetson_stats](https://github.com/rbonghi/jetson_stats) by rbonghi.  
+Adapted and extended for Rockchip SoC platforms.

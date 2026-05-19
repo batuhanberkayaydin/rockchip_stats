@@ -30,6 +30,7 @@ class NColors:
     BLUE = 4
     MAGENTA = 5
     CYAN = 6
+    ORANGE = 13
 
     iRED = 7
     iGREEN = 8
@@ -45,6 +46,8 @@ class NColors:
         curses.init_pair(NColors.BLUE, curses.COLOR_BLUE, curses.COLOR_BLACK)
         curses.init_pair(NColors.MAGENTA, curses.COLOR_MAGENTA, curses.COLOR_BLACK)
         curses.init_pair(NColors.CYAN, curses.COLOR_CYAN, curses.COLOR_BLACK)
+        _orange_fg = 208 if curses.COLORS >= 256 else curses.COLOR_YELLOW
+        curses.init_pair(NColors.ORANGE, _orange_fg, curses.COLOR_BLACK)
         # Inverted (background colors)
         curses.init_pair(NColors.iRED, curses.COLOR_WHITE, curses.COLOR_RED if not color_filter else curses.COLOR_BLUE)
         curses.init_pair(NColors.iGREEN, curses.COLOR_WHITE, curses.COLOR_GREEN)
@@ -84,6 +87,10 @@ class NColors:
     @staticmethod
     def cyan():
         return curses.color_pair(NColors.CYAN)
+
+    @staticmethod
+    def orange():
+        return curses.color_pair(NColors.ORANGE)
 
     @staticmethod
     def ired():

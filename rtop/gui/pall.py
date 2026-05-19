@@ -27,7 +27,7 @@ from .pcpu import compact_cpus
 from .pgpu import compact_gpu
 from .pnpu import compact_npu
 from .pmem import compact_memory
-from .pcontrol import compact_temperatures
+from .pcontrol import compact_temperatures, throttle_sidebar_row_count, _thermal_from_client
 from .pengine import compact_engines
 from .lib.process_table import ProcessTable
 
@@ -109,11 +109,16 @@ class ALL(Page):
             self._columns.append(compact_engines)
             eng_rows = _engine_rows(rga, mpp)
             self._max_height_menu = max(self._max_height_menu, eng_rows)
-        # Temperature column
-        temps = client.temperature if hasattr(client, 'temperature') else {}
-        if temps:
+        # Temperature column (Temp + compact Throttle under it)
+        thermal = _thermal_from_client(client)
+        fan = client.fan if hasattr(client, 'fan') else {}
+        if thermal:
             self._columns.append(compact_temperatures)
-            self._max_height_menu = max(self._max_height_menu, len(temps) + 1)
+            temp_rows = len(thermal) + 1
+            thr_rows = throttle_sidebar_row_count(fan)
+            gap_before_throttle = 1 if thr_rows else 0
+            self._max_height_menu = max(
+                self._max_height_menu, temp_rows + gap_before_throttle + thr_rows)
         # Border rows top + bottom
         self._max_height_menu += 2
 

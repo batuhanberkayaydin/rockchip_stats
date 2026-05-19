@@ -57,6 +57,25 @@ def main():
                 if isinstance(val, (int, float)):
                     print(f"Temp {name}: {val / 1000:.1f}°C")
 
+            # Print thermal trip points (millidegrees from API)
+            thermal = rockchip.thermal
+            for zone, data in thermal.items():
+                print(f"\nThermal {zone}: {data['temp'] / 1000:.1f}°C")
+                for tp in data.get('trip_points', []):
+                    print(f"  {tp['type']}: {tp['temp'] / 1000:.1f}°C")
+
+            # Print cpufreq/devfreq throttle state (cur_state / max_state)
+            fan = rockchip.fan or {}
+            throttle_types = ('thermal-cpufreq', 'thermal-devfreq', 'cpufreq', 'devfreq')
+            for name, info in fan.items():
+                if not isinstance(info, dict):
+                    continue
+                dev_type = str(info.get('type', '')).lower()
+                if dev_type in throttle_types or 'cpufreq' in dev_type or 'devfreq' in dev_type:
+                    cur = info.get('cur_state', 0)
+                    mx = info.get('max_state', 0)
+                    print(f"Throttle {name}: {cur}/{mx}")
+
 
 if __name__ == "__main__":
     main()

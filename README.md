@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img width="1920" alt="rockchip-stats screenshot" src="https://github.com/user-attachments/assets/8d5e6163-13a2-4344-bd01-473009f2fbcb" />
+  <img width="1920" alt="rockchip-stats demo" src="docs/assets/rtop-demo.gif" />
 </p>
 
 ---
@@ -14,6 +14,7 @@
 
 **Features:**
 - Real-time monitoring of CPU, GPU, NPU, RGA, MPP, Memory, Temperature, Fan
+- Thermal trip points and cpufreq/devfreq throttle visibility
 - Fan speed and CPU governor control
 - Board and SoC auto-detection
 - Importable Python library
@@ -68,7 +69,7 @@ rtop
 | `4` | NPU  | NPU per-core utilization |
 | `5` | ENG  | RGA & MPP hardware engines |
 | `6` | MEM  | RAM, Swap, CMA |
-| `7` | CTRL | Temperature, Fan, Power |
+| `7` | CTRL | Temperature (with trip points), Throttle, Fan, Power |
 | `8` | INFO | Board & system information |
 
 ---
@@ -94,6 +95,11 @@ with rtop() as r:
         for name, val in r.temperature.items():
             if isinstance(val, (int, float)):
                 print(f"{name}: {val / 1000:.1f}°C")
+
+        for zone, data in r.thermal.items():
+            print(f"{zone}: {data['temp'] / 1000:.1f}°C")
+            for tp in data.get('trip_points', []):
+                print(f"  {tp['type']}: {tp['temp'] / 1000:.1f}°C")
 
         for i, core in enumerate(r.npu.get('cores', [])):
             print(f"NPU Core{i}: {core.get('load', 0)}%")

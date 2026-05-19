@@ -13,6 +13,9 @@ build/
 # log file
 *.log
 
+# Local scratch (GIF sources, captures, etc.)
+data/
+
 # Test virtual environment
 venv/
 

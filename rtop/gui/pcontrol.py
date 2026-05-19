@@ -17,7 +17,8 @@
 Control page — temperatures, fans and power, mirroring jtop's 7CTRL layout.
 
 Sections (from top, each only drawn when the underlying data is available):
-  Temperatures  – gauge per thermal zone with color-coded bands
+  Temperatures  – per-zone bar 0..critical °C with trip markers; status after ]
+  Throttle      – cpufreq / devfreq cooling (shown under Temp on ALL page too)
   Fans          – PWM %, RPM and cooling-device state from hwmon / thermal
   Power         – per-rail power / voltage / current (INA2xx hwmon) + total
   Board info    – uptime and hardware identification
@@ -32,50 +33,264 @@ from .rtopgui import Page
 from .lib.colors import NColors
 from .lib.common import check_curses, strfdelta, plot_name_info, unit_to_string
 from .lib.linear_gauge import basic_gauge
+from ..core.temperature import TEMPERATURE_OFFLINE, snapshot_zone_trips_millidegrees
 
 
-TEMP_WARN = 70
-TEMP_HOT = 50
+_DEFAULT_SCALE_CRIT_C = 115.0
+
+
+def _throttle_short_label(dev_type):
+    d = dev_type.lower()
+    if d.startswith('cpufreq-'):
+        return d.replace('cpufreq-', '')[:12]
+    if d.startswith('devfreq-'):
+        rest = d.replace('devfreq-', '')
+        if 'gpu' in rest:
+            return 'gpu'
+        if 'dmc' in rest:
+            return 'dmc'
+        if '.' in rest:
+            return rest.split('.')[-1][:12]
+        return rest[:12]
+    return dev_type[:12]
+
+
+def _throttle_gauge_entries(fan):
+    """Sorted (label, cur_state, max_state) for cpufreq / devfreq cooling devices."""
+    if not fan:
+        return []
+    out = []
+    for _key, info in fan.items():
+        if not isinstance(info, dict):
+            continue
+        dev_type = str(info.get('type', '')).lower()
+        if not (dev_type.startswith('cpufreq-') or dev_type.startswith('devfreq-')):
+            continue
+        mx = int(info.get('max_state', 0) or 0)
+        if mx <= 0:
+            continue
+        cur = int(info.get('cur_state', 0) or 0)
+        out.append((_throttle_short_label(dev_type), cur, mx))
+    return sorted(out, key=lambda e: e[0])
+
+
+def throttle_sidebar_row_count(fan):
+    """Extra rows under Temp on ALL page (0, or 1 header + one row per device)."""
+    n = len(_throttle_gauge_entries(fan))
+    return (1 + n) if n else 0
+
+
+def _thermal_trips_celsius(trip_points_md):
+    out = []
+    for tp in trip_points_md or []:
+        if not isinstance(tp, dict):
+            continue
+        try:
+            t_c = float(tp['temp']) / 1000.0
+        except (TypeError, ValueError, KeyError):
+            continue
+        out.append({
+            'type': str(tp.get('type', 'unknown')).lower(),
+            'temp': t_c,
+        })
+    return out
+
+
+def _scale_max_celsius(trips_c):
+    crit = [t['temp'] for t in trips_c if t['type'] == 'critical']
+    if crit:
+        return max(crit)
+    return _DEFAULT_SCALE_CRIT_C
+
+
+def _thermal_status_label(temp_c, trips_c):
+    crit_vals = [t['temp'] for t in trips_c if t['type'] == 'critical']
+    if crit_vals and temp_c + 1e-6 >= max(crit_vals):
+        return 'Cr'
+    passives = sorted([t['temp'] for t in trips_c if t['type'] == 'passive'])
+    best = 0
+    for i, p in enumerate(passives, start=1):
+        if temp_c + 1e-6 >= p:
+            best = i
+    if best:
+        return 'P{}'.format(best)
+    return 'OK'
+
+
+def _fill_color_for_temp(temp_c, trips_c):
+    crit_vals = [t['temp'] for t in trips_c if t['type'] == 'critical']
+    if crit_vals and temp_c + 1e-6 >= max(crit_vals):
+        return NColors.red()
+    passives = sorted([t['temp'] for t in trips_c if t['type'] == 'passive'])
+    if passives and temp_c + 1e-6 >= passives[-1]:
+        return NColors.orange()
+    if passives and temp_c + 1e-6 >= passives[0]:
+        return NColors.yellow()
+    return NColors.green()
+
+
+def _marker_color_for_trip(trip, passives_sorted):
+    ttype = trip['type']
+    ttemp = trip['temp']
+    if ttype == 'critical':
+        return NColors.red()
+    if ttype == 'passive' and passives_sorted:
+        if abs(ttemp - passives_sorted[-1]) < 1e-3:
+            return NColors.orange()
+        return NColors.yellow()
+    return NColors.yellow()
+
+
+def draw_temp_gauge(stdscr, y, x, width, name, temp_md, trip_points_md,
+                    name_width=12, decimals=0):
+    """Bar scaled 0..critical °C; fill | ; empty spaces; trip | markers; ] XXC STATUS."""
+    try:
+        temp_c = float(temp_md) / 1000.0
+    except (TypeError, ValueError):
+        temp_c = float(TEMPERATURE_OFFLINE)
+
+    if temp_c <= TEMPERATURE_OFFLINE + 1e-6:
+        name_pad = '{:<{w}}'.format(str(name)[:name_width], w=name_width)
+        try:
+            stdscr.addstr(y, x, name_pad, curses.A_DIM | curses.A_BOLD)
+            stdscr.addstr(y, x + len(name_pad), " OFF", NColors.ired())
+        except curses.error:
+            pass
+        return
+
+    trips_raw = trip_points_md or snapshot_zone_trips_millidegrees().get(name) or []
+    trips_c = _thermal_trips_celsius(trips_raw)
+    scale_max = _scale_max_celsius(trips_c)
+    if scale_max <= 0:
+        scale_max = _DEFAULT_SCALE_CRIT_C
+
+    status = _thermal_status_label(temp_c, trips_c)
+    if decimals:
+        temp_str = "{:.1f}C".format(temp_c)
+    else:
+        temp_str = "{:.0f}C".format(temp_c)
+    # One space before temp value; strip trailing whitespace after status
+    suffix = (" " + temp_str + " " + status).rstrip()
+
+    # Fixed-width name column so every `[` lines up; one space then bar
+    name_pad = '{:<{w}}'.format(str(name)[:name_width], w=name_width)
+    # name_pad + ' ' + '[' + inner + ']' + suffix
+    inner = width - len(name_pad) - 1 - 1 - 1 - len(suffix)
+    inner = max(4, inner)
+
+    fill_c = _fill_color_for_temp(temp_c, trips_c)
+    n_fill = int(round(min(max(temp_c / scale_max, 0.0), 1.0) * inner))
+    n_fill = max(0, min(n_fill, inner))
+
+    passives_sorted = sorted([t['temp'] for t in trips_c if t['type'] == 'passive'])
+    marker_cols = {}
+    for trip in sorted(trips_c, key=lambda t: 1 if t['type'] == 'critical' else 0):
+        col = int(round(min(max(trip['temp'] / scale_max, 0.0), 1.0) * (inner - 1)))
+        col = max(0, min(col, inner - 1))
+        marker_cols[col] = _marker_color_for_trip(trip, passives_sorted)
+
+    x_after_pad = x + len(name_pad)
+    x_open = x_after_pad + 1
+    x_bar = x_open + 1
+    try:
+        stdscr.addstr(y, x, name_pad, curses.A_BOLD)
+        stdscr.addstr(y, x_after_pad, " ", curses.A_BOLD)
+        stdscr.addstr(y, x_open, "[", curses.A_BOLD)
+        for i in range(inner):
+            if i < n_fill:
+                stdscr.addch(y, x_bar + i, ord('|'), fill_c | curses.A_BOLD)
+            else:
+                stdscr.addch(y, x_bar + i, ord(' '), curses.A_NORMAL)
+        for col, mcolor in marker_cols.items():
+            stdscr.addch(y, x_bar + col, ord('|'), mcolor | curses.A_BOLD)
+        stdscr.addstr(y, x_bar + inner, "]" + suffix, curses.A_BOLD)
+    except curses.error:
+        pass
+
+
+def _thermal_from_client(client):
+    thermal = getattr(client, 'thermal', None) or {}
+    if thermal:
+        return thermal
+    temps = getattr(client, 'temperature', None) or {}
+    return {
+        n: {'temp': v, 'trip_points': []}
+        for n, v in temps.items()
+        if isinstance(v, (int, float))
+    }
 
 
 # ── Compact temp panel (shared with the ALL overview page) ────────────────────
 
 def compact_temperatures(stdscr, pos_y, pos_x, width, height, client):
-    temps = client.temperature
-    if not temps:
+    thermal = _thermal_from_client(client)
+    if not thermal:
         return
     line = 1
+    gauge_w = max(0, width - 4)
     try:
         stdscr.addstr(pos_y + line, pos_x + 2, "Temp", curses.A_BOLD)
         line += 1
     except curses.error:
         pass
-    for name, value in temps.items():
-        if not isinstance(value, (int, float)):
-            continue
+    for name, row in thermal.items():
         if line >= height - 2:
             break
-        temp_c = value / 1000
-        if temp_c > TEMP_WARN:
-            color = NColors.red()
-        elif temp_c > TEMP_HOT:
-            color = NColors.yellow()
-        else:
-            color = NColors.green()
-        gauge_w = width - 4
-        if gauge_w > 8:
-            data = {
-                'name': name[:8],
-                'color': color | curses.A_BOLD,
-                'online': True,
-                'values': [(min(temp_c, 100), color)],
-                'mright': "{:.0f}C".format(temp_c),
-            }
+        if not isinstance(row, dict):
+            continue
+        temp_md = row.get('temp')
+        if not isinstance(temp_md, (int, float)):
+            continue
+        if gauge_w > 12:
             try:
-                basic_gauge(stdscr, pos_y + line, pos_x + 2, gauge_w, data)
+                draw_temp_gauge(
+                    stdscr, pos_y + line, pos_x + 2, gauge_w,
+                    name, temp_md, row.get('trip_points', []),
+                    name_width=8, decimals=0,
+                )
             except curses.error:
                 pass
         line += 1
+
+    # Throttle — same column as Temp on ALL page (fills space below temps)
+    thr = _throttle_gauge_entries(getattr(client, 'fan', None) or {})
+    if thr:
+        if line < height - 2:
+            line += 1
+        if line < height - 2:
+            try:
+                stdscr.addstr(pos_y + line, pos_x + 2, "Throttle", curses.A_BOLD)
+                line += 1
+            except curses.error:
+                pass
+            for label, cur, mx in thr:
+                if line >= height - 2:
+                    break
+                if gauge_w <= 8:
+                    break
+                pct = cur * 100.0 / mx if mx else 0.0
+                pct = max(0.0, min(pct, 100.0))
+                if cur == 0:
+                    bar_color = NColors.green()
+                elif pct < 80:
+                    bar_color = NColors.yellow()
+                else:
+                    bar_color = NColors.red()
+                right = '{}/{}'.format(cur, mx)
+                if cur > 0:
+                    right += ' !!'
+                data = {
+                    'name': str(label)[:8],
+                    'color': curses.A_BOLD,
+                    'online': True,
+                    'values': [(pct, bar_color)],
+                    'mright': right,
+                }
+                try:
+                    basic_gauge(stdscr, pos_y + line, pos_x + 2, gauge_w, data)
+                except curses.error:
+                    pass
+                line += 1
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -128,24 +343,58 @@ def _classify_fan_entry(name, info):
 
 # ── Panel drawers ────────────────────────────────────────────────────────────
 
-def draw_temperatures(stdscr, y, x, width, temps):
+def draw_temperatures(stdscr, y, x, width, thermal, temps_fallback=None):
+    rows = thermal if thermal else {}
+    if not rows and temps_fallback:
+        rows = {
+            n: {'temp': v, 'trip_points': []}
+            for n, v in temps_fallback.items()
+            if isinstance(v, (int, float))
+        }
+    if not rows:
+        return y
     y = _draw_section(stdscr, y, x, "Temperatures")
-    for name, value in temps.items():
-        if not isinstance(value, (int, float)):
+    for name, row in rows.items():
+        if not isinstance(row, dict):
             continue
-        temp_c = value / 1000
-        if temp_c > TEMP_WARN:
-            color = NColors.red()
-        elif temp_c > TEMP_HOT:
-            color = NColors.yellow()
+        temp_md = row.get('temp')
+        if not isinstance(temp_md, (int, float)):
+            continue
+        try:
+            draw_temp_gauge(
+                stdscr, y, x + 2, width - 4, name, temp_md,
+                row.get('trip_points', []), name_width=12, decimals=1,
+            )
+        except curses.error:
+            pass
+        y += 1
+    return y + 1
+
+
+def draw_throttle(stdscr, y, x, width, fan):
+    """ cpufreq / devfreq cooling states (cur_state / max_state). """
+    entries = _throttle_gauge_entries(fan)
+    if not entries:
+        return y
+    y = _draw_section(stdscr, y, x, "Throttle")
+    for label, cur, mx in entries:
+        pct = cur * 100.0 / mx if mx else 0.0
+        pct = max(0.0, min(pct, 100.0))
+        if cur == 0:
+            bar_color = NColors.green()
+        elif pct < 80:
+            bar_color = NColors.yellow()
         else:
-            color = NColors.green()
+            bar_color = NColors.red()
+        right = '{}/{}'.format(cur, mx)
+        if cur > 0:
+            right += ' !!'
         data = {
-            'name': '{:<12}'.format(name[:12]),
+            'name': '{:<12}'.format(str(label)[:12]),
             'color': curses.A_BOLD,
             'online': True,
-            'values': [(min(temp_c, 100), color)],
-            'mright': "{:.1f}C".format(temp_c),
+            'values': [(pct, bar_color)],
+            'mright': right,
         }
         try:
             basic_gauge(stdscr, y, x + 2, width - 4, data)
@@ -273,11 +522,15 @@ class CTRL(Page):
         height, width, first = self.size_page()
         line = first + 1
 
+        thermal = getattr(self.rtop, 'thermal', None) or {}
         temps = self.rtop.temperature
-        if temps:
-            line = draw_temperatures(self.stdscr, line, 1, width - 2, temps)
+        if thermal or temps:
+            line = draw_temperatures(
+                self.stdscr, line, 1, width - 2, thermal, temps_fallback=temps)
 
         fan = self.rtop.fan
+        if fan:
+            line = draw_throttle(self.stdscr, line, 1, width - 2, fan)
         if fan:
             line = draw_fans(self.stdscr, line, 1, width - 2, fan)
 

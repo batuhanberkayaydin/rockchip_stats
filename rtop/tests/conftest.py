@@ -63,13 +63,19 @@ def mock_sysfs(tmp_path):
     npu_debug.mkdir(parents=True)
     (npu_debug / "load").write_text("Core0:  0%\nCore1:  0%\nCore2:  0%")
 
-    # Thermal zones
+    # Thermal zones (with trip points)
     thermal_dir = tmp_path / "sys" / "class" / "thermal"
     for i, name in enumerate(["cpu-thermal", "gpu-thermal"]):
         tz_dir = thermal_dir / f"thermal_zone{i}"
         tz_dir.mkdir(parents=True)
         (tz_dir / "temp").write_text(f"{45000 + i * 5000}")
         (tz_dir / "type").write_text(name)
+        (tz_dir / "trip_point_0_temp").write_text("70000")
+        (tz_dir / "trip_point_0_type").write_text("passive")
+        (tz_dir / "trip_point_0_hyst").write_text("2000")
+        (tz_dir / "trip_point_1_temp").write_text("85000")
+        (tz_dir / "trip_point_1_type").write_text("critical")
+        (tz_dir / "trip_point_1_hyst").write_text("0")
 
     # Cooling devices
     for i in range(2):

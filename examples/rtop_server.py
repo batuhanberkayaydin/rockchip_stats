@@ -39,6 +39,8 @@ class RtopHandler(BaseHTTPRequestHandler):
             'npu': dict(rockchip.npu) if rockchip.npu else None,
             'memory': dict(rockchip.memory) if rockchip.memory else None,
             'temperature': dict(rockchip.temperature) if rockchip.temperature else None,
+            'thermal': dict(rockchip.thermal) if rockchip.thermal else None,
+            'fan': dict(rockchip.fan) if rockchip.fan else None,
             'hardware': dict(rockchip.hardware) if rockchip.hardware else None,
         }
 

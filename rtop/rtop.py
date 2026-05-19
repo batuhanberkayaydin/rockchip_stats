@@ -156,6 +156,11 @@ class rtop(Thread):
         return self._stats.get('temperature', {})
 
     @property
+    def thermal(self):
+        """Return per-zone temperature with trip points (millidegrees)."""
+        return self._stats.get('thermal', {})
+
+    @property
     def fan(self):
         """Return fan stats."""
         return self._stats.get('fan', {})
@@ -520,27 +525,53 @@ class StandaloneRtop(object):
         else:
             stats['memory'] = {}
 
-        # === Temperature ===
+        # === Temperature + thermal (trip points for gauges) ===
         temp_raw = raw.get('temperature', {})
         if temp_raw:
             temp = {}
+            thermal = {}
             for name, val in temp_raw.items():
                 if isinstance(val, dict):
-                    # Flatten nested dicts like {'bigcore0': {'bigcore0': 52.692, 'online': True}}
-                    inner_val = val.get(name, val)
+                    inner_val = val.get(name)
+                    if not isinstance(inner_val, (int, float)):
+                        inner_val = val.get('temp')
                     if isinstance(inner_val, (int, float)):
-                        temp[name] = inner_val * 1000  # Convert to millidegrees for GUI
+                        temp[name] = inner_val * 1000
+                        trips_md = []
+                        for t in val.get('trip_points') or []:
+                            if not isinstance(t, dict):
+                                continue
+                            try:
+                                t_c = float(t.get('temp', 0))
+                            except (TypeError, ValueError):
+                                continue
+                            try:
+                                hyst_c = float(t.get('hyst', 0) or 0)
+                            except (TypeError, ValueError):
+                                hyst_c = 0.0
+                            trips_md.append({
+                                'type': str(t.get('type', 'unknown')),
+                                'temp': t_c * 1000.0,
+                                'hyst': hyst_c * 1000.0,
+                            })
+                        thermal[name] = {
+                            'temp': inner_val * 1000.0,
+                            'trip_points': trips_md,
+                        }
                     else:
-                        # Try to find a numeric value
                         for k, v in val.items():
-                            if isinstance(v, (int, float)) and k != 'online':
+                            if isinstance(v, (int, float)) and k not in ('online', 'trip_points'):
                                 temp[name] = v * 1000
+                                thermal[name] = {'temp': v * 1000.0, 'trip_points': []}
                                 break
                 elif isinstance(val, (int, float)):
-                    temp[name] = val * 1000  # Convert to millidegrees
+                    temp[name] = val * 1000
+                    thermal[name] = {'temp': val * 1000.0, 'trip_points': []}
             stats['temperature'] = temp
+            stats['thermal'] = thermal
         else:
             stats['temperature'] = {}
+            stats['thermal'] = {}
 
         # === Fan ===
         fan_raw = raw.get('fan', {})
@@ -615,6 +646,10 @@ class StandaloneRtop(object):
     @property
     def temperature(self):
         return self._stats.get('temperature', {})
+
+    @property
+    def thermal(self):
+        return self._stats.get('thermal', {})
 
     @property
     def fan(self):

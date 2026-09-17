@@ -51,7 +51,23 @@ def main():
                 ram = mem.get('ram', {})
                 print(f"\nRAM: {ram.get('used', 0) / 1e6:.0f} / {ram.get('total', 0) / 1e6:.0f} MB")
 
-            # Print Temperature
+            # Print RGA / MPP engines
+            rga = rockchip.rga
+            if rga:
+                print(f"\nRGA online={rga.get('online')} active={rga.get('active')} "
+                      f"load={rga.get('load')} source={rga.get('source')}")
+                for i, core in enumerate(rga.get('cores', [])):
+                    name = (rga.get('core_names') or [])
+                    label = name[i] if i < len(name) else f"C{i}"
+                    print(f"  {label}: {core}%")
+
+            mpp = rockchip.mpp
+            if mpp:
+                print(f"MPP any_active={mpp.get('any_active')}")
+                for group in ('decoders', 'encoders', 'others'):
+                    for name, info in (mpp.get(group) or {}).items():
+                        print(f"  {name}: active={info.get('active')} "
+                              f"source={info.get('source')} tasks={info.get('task_count')}")
             temps = rockchip.temperature
             for name, val in temps.items():
                 if isinstance(val, (int, float)):

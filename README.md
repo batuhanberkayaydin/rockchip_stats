@@ -15,6 +15,7 @@
 **Features:**
 - Real-time monitoring of CPU, GPU, NPU, RGA, MPP, Memory, Temperature, Fan
 - Thermal trip points and cpufreq/devfreq throttle visibility
+- RGA / MPP engine activity without root (platform runtime PM fallback when debugfs is 0700)
 - Fan speed and CPU governor control
 - Board and SoC auto-detection
 - Importable Python library
@@ -52,6 +53,12 @@ sudo pip3 install .
 ```
 
 After install, reboot once so your user is added to the `rtop` group.
+
+The ENG page (key `5`) prefers `/sys/kernel/debug/rkrga/load` for per-core RGA
+percentages when that file is readable (rtop service as root). Unprivileged
+`rtop --no-service` still shows RGA cores and MPP jpegd/rkvdec activity from
+world-readable `power/runtime_status` and `power/runtime_active_time` on the
+matching platform devices (`/dev/rga`, `*.jpegd`, `*.rga`, …).
 
 ---
 

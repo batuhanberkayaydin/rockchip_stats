@@ -476,7 +476,9 @@ class StandaloneRtop(object):
             rga['active'] = rga_raw.get('active', False)
             rga['load'] = rga_raw.get('load', 0)
             rga['cores'] = rga_raw.get('cores', [])  # list of per-core %
+            rga['core_names'] = rga_raw.get('core_names', [])
             rga['version'] = rga_raw.get('version', '')
+            rga['source'] = rga_raw.get('source')
             # freq in Hz dict
             freq_raw = rga_raw.get('freq', {})
             rga['freq'] = freq_raw if isinstance(freq_raw, dict) else {}

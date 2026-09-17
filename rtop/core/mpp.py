@@ -19,6 +19,10 @@ MPP (Media Process Platform) monitoring for Rockchip SoCs.
 Monitors video encoder/decoder core sessions and task counts via
 /proc/mpp_service/<core_name>/.
 
+jpegd (and some other cores) do not expose task_count or sessions-info.
+For those, activity is inferred from the matching platform device's
+runtime PM (runtime_status / runtime_active_time), which is world-readable.
+
 MPP cores detected on RK3588:
   rkvdec-core0/1   – H.264/H.265 decoder
   rkvenc-core0/1   – H.264/H.265/H.264 encoder
@@ -28,15 +32,21 @@ MPP cores detected on RK3588:
   iep              – Image Enhancement Processor
   vdpu / vepu      – legacy VPU (older SoCs)
 
-Active/idle is determined by task_count > 0 and/or sessions-info showing
-at least one active entry.
+Active/idle is determined by a changing task_count, sessions-info with
+at least one active entry, or platform runtime PM showing recent use.
 """
 
 import os
 import re
 import logging
 from .common import cat
-from .hw_detect import get_mpp_path, get_mpp_cores
+from .hw_detect import (
+    get_mpp_path,
+    get_mpp_cores,
+    get_mpp_platform_devices,
+    read_runtime_pm,
+    runtime_pm_busy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +126,7 @@ class MPPService(object):
         self._mpp_path = get_mpp_path()
         self._cores = get_mpp_cores()
         self._prev_task_counts = {}  # core_name -> last seen task_count value
+        self._prev_active_time = {}  # platform path -> last runtime_active_time
         if self._mpp_path:
             logger.info("MPP path: %s  cores: %s", self._mpp_path, list(self._cores.keys()))
         else:
@@ -141,8 +152,9 @@ class MPPService(object):
           {
             'label':      str   human-readable name
             'task_count': int   current task count (or -1=no permission, None=no file)
-            'active':     bool  task_count > 0 or sessions active
+            'active':     bool  task_count delta, sessions, or runtime PM
             'online':     bool  core present in sysfs
+            'source':     str   'task_count', 'sessions', 'runtime', or None
           }
         """
         status = {'decoders': {}, 'encoders': {}, 'others': {}, 'any_active': False}
@@ -152,14 +164,21 @@ class MPPService(object):
 
         for core_name, core_path in self._cores.items():
             tc = _read_task_count(core_path)
+            active = False
+            source = None
             if tc is not None and tc >= 0:
-                # task_count bir toplam sayaç — önceki değerden farklıysa aktif
+                # task_count is a cumulative counter — a change means work ran
                 prev = self._prev_task_counts.get(core_name)
-                active = (prev is not None) and (tc != prev)
+                if prev is not None and tc != prev:
+                    active = True
+                    source = 'task_count'
                 self._prev_task_counts[core_name] = tc
-            else:
-                # task_count dosyası yok (eski kernel), sessions-info'ya bak
-                active = _has_active_sessions(core_path)
+            if not active and _has_active_sessions(core_path):
+                active = True
+                source = 'sessions'
+            if not active and self._runtime_busy(core_name):
+                active = True
+                source = 'runtime'
             if active:
                 status['any_active'] = True
 
@@ -168,6 +187,7 @@ class MPPService(object):
                 'task_count': tc,
                 'active': active,
                 'online': True,
+                'source': source,
             }
             ctype = _codec_type(core_name)
             if ctype == 'decoder':
@@ -178,3 +198,16 @@ class MPPService(object):
                 status['others'][core_name] = info
 
         return status
+
+    def _runtime_busy(self, core_name):
+        """True if the matching platform device shows recent runtime PM use."""
+        devices = get_mpp_platform_devices(core_name)
+        busy = False
+        for path in devices:
+            pm = read_runtime_pm(path)
+            prev = self._prev_active_time.get(path)
+            if runtime_pm_busy(pm, prev):
+                busy = True
+            if pm is not None:
+                self._prev_active_time[path] = int(pm.get('active_time') or 0)
+        return busy
